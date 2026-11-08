@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smith.cliwright.dev/schemas/jig-manifest.v1.json",
+  "title": "Jig Template Manifest",
+  "description": "Template manifest (jig.json). Declares the variables a template prompts for: default, prompt text, and a validation pattern per variable. PROJECT_NAME is required (validated by jig, not expressible here).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "variables"],
+  "properties": {
+    "version": {
+      "description": "File-format version. Always 1 for this schema.",
+      "type": "integer",
+      "const": 1
+    },
+    "variables": {
+      "description": "Template variables by name. Every variable declares a default; prompt text and a validation pattern are optional.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["default"],
+        "properties": {
+          "default": {
+            "description": "Value used when the user does not override it.",
+            "type": "string"
+          },
+          "prompt": {
+            "description": "Prompt text shown in interactive mode.",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Regex the final value must match (RE2 syntax).",
+            "type": "string",
+            "format": "regex"
+          }
+        }
+      }
+    }
+  }
+}

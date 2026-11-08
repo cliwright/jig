@@ -1,0 +1,10 @@
+# smith.yml — Smith project manifest. One per project directory; declares
+# what the project IS, never how it is built (that's the project type's job).
+version: 1
+
+name: jig
+
+type: go/std/tool@1
+
+params:
+  binary: jig
