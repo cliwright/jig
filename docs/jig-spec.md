@@ -76,6 +76,8 @@ NEVER rendered into the output (like cookiecutter.json).
 ```
 jig new <language>/<flavor>/<kind>   # scaffolds a new TEMPLATE in registry
                                      # layout: <l>/<f>/<k>/v1/{{.PROJECT_NAME}}/jig.json
+                                     # under --templates-dir (default $JIG_TEMPLATES_DIR,
+                                     # else the cwd)
 jig render --template python/astral/lib [--version 1] \
     --output path/to/target [--vars-file jig-vars.json] [--var key=value ...]
 jig render --template path/to/foo --output path/to/target

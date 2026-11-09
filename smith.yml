@@ -8,3 +8,4 @@ type: go/std/tool@1
 
 params:
   binary: jig
+  dest: "{{.SMITH_REPO_ROOT}}/bin"
