@@ -1,12 +1,9 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -68,73 +65,23 @@ func runRender(cmd *cobra.Command, templateArg, output string, version int, temp
 		return err
 	}
 
-	values := m.Defaults()
-	if varsFile != "" {
-		fromFile, err := readVarsFile(varsFile)
-		if err != nil {
-			return err
-		}
-		for k, v := range fromFile {
-			values[k] = v
-		}
+	var prompt jig.Prompter
+	if varsFile == "" {
+		prompt = jig.StdinPrompter(cmd.InOrStdin(), cmd.OutOrStdout())
 	}
-	for _, kv := range varFlags {
-		key, value, ok := strings.Cut(kv, "=")
-		if !ok {
-			return fmt.Errorf("--var %q: want key=value", kv)
-		}
-		values[key] = value
+	values, err := jig.ResolveValues(m, varsFile, varFlags, prompt)
+	if err != nil {
+		return err
 	}
 
-	out := cmd.OutOrStdout()
-	if varsFile == "" {
-		if err := prompt(cmd, m, values); err != nil {
-			return err
-		}
-	}
 	res, err := jig.Render(dir, output, values, jig.Options{Force: force})
 	if err != nil {
 		return err
 	}
+	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "rendered %s\n", res.OutputDir)
 	for _, name := range res.Unused {
 		fmt.Fprintf(out, "warning: variable %s is declared but never used by the template\n", name)
-	}
-	return nil
-}
-
-func readVarsFile(path string) (map[string]string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", path, err)
-	}
-	var values map[string]string
-	if err := json.Unmarshal(data, &values); err != nil {
-		return nil, fmt.Errorf("parsing %s: want a JSON object of string values: %w", path, err)
-	}
-	return values, nil
-}
-
-// prompt asks for each variable in sorted order, defaulting on empty input.
-// The final values are validated by Render (patterns included); an empty
-// answer always means the default.
-func prompt(cmd *cobra.Command, m *jig.Manifest, values map[string]string) error {
-	reader := bufio.NewReader(cmd.InOrStdin())
-	out := cmd.OutOrStdout()
-	for _, name := range m.Names() {
-		v := m.Variables[name]
-		label := v.Prompt
-		if label == "" {
-			label = name
-		}
-		fmt.Fprintf(out, "%s [%s]: ", label, values[name])
-		answer, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("reading answer for %s: %w", name, err)
-		}
-		if answer = strings.TrimSpace(answer); answer != "" {
-			values[name] = answer
-		}
 	}
 	return nil
 }
