@@ -1,0 +1,11 @@
+[project]
+name = "jig-docs"
+version = "0.1.0"
+description = "Documentation site for jig (https://github.com/cliwright/jig)"
+requires-python = ">= 3.13"
+dependencies = [
+    "zensical>=0.0.68",
+]
+
+[tool.uv]
+package = false
