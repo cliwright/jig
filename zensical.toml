@@ -6,7 +6,6 @@ extra_css = ["stylesheets/extra.css"]
 
 nav = [
   { "Home" = "index.md" },
-  { "Spec" = "jig-spec.md" },
 ]
 
 [project.theme]
