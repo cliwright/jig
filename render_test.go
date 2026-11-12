@@ -152,12 +152,15 @@ func TestRenderRejectsPatternViolation(t *testing.T) {
 	}
 }
 
-func TestRenderRefusesNonEmptyOutput(t *testing.T) {
+func TestRenderRefusesToOverwriteFiles(t *testing.T) {
 	dir := writeTemplate(t, map[string]string{
 		"jig.json": templateManifest,
 		"f.txt":    "x",
 	})
 	out := t.TempDir()
+
+	// A non-empty output directory is fine as long as no file collides —
+	// rendering a second type version next to the first is the normal case.
 	existing := filepath.Join(out, "demo")
 	if err := os.MkdirAll(existing, 0o755); err != nil {
 		t.Fatal(err)
@@ -165,12 +168,23 @@ func TestRenderRefusesNonEmptyOutput(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(existing, "keep.txt"), []byte("keep"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	vars := map[string]string{"PROJECT_NAME": "demo", "author": "x"}
-	_, err := Render(dir, out, vars, Options{})
-	if err == nil || !strings.Contains(err.Error(), "not empty") {
-		t.Fatalf("error = %v, want non-empty refusal", err)
+	if _, err := Render(dir, out, vars, Options{}); err != nil {
+		t.Fatalf("Render alongside existing files: %v", err)
 	}
+	keep, err := os.ReadFile(filepath.Join(existing, "keep.txt"))
+	if err != nil || string(keep) != "keep" {
+		t.Fatalf("unrelated file was disturbed: %v %q", err, keep)
+	}
+
+	// A second identical render collides on f.txt and must refuse BEFORE
+	// writing anything.
+	_, err = Render(dir, out, vars, Options{})
+	if err == nil || !strings.Contains(err.Error(), "would overwrite") {
+		t.Fatalf("error = %v, want overwrite refusal", err)
+	}
+
+	// Force allows the overwrite.
 	if _, err := Render(dir, out, vars, Options{Force: true}); err != nil {
 		t.Fatalf("forced Render: %v", err)
 	}
@@ -214,5 +228,48 @@ func TestResolveTemplate(t *testing.T) {
 	got, err = ResolveTemplate("", filepath.Join(base, "python/astral/lib", "v2"), 0)
 	if err != nil || !strings.HasSuffix(got, "v2") {
 		t.Errorf("path to version dir = %q, %v; want v2", got, err)
+	}
+}
+
+func TestRenderVerbatimSubtree(t *testing.T) {
+	dir := writeTemplate(t, map[string]string{
+		"jig.json":                            `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}}, "verbatim": ["template"]}`,
+		"README.md":                           "# {{.PROJECT_NAME}}",
+		"template/{{.PROJECT_NAME}}/jig.json": `{"version": 1, "variables": {"PROJECT_NAME": {"default": "inner"}}}`,
+		"template/{{.PROJECT_NAME}}/notes.md": "literal {{.UNDECLARED}} stays",
+	})
+	out := t.TempDir()
+
+	if _, err := Render(dir, out, map[string]string{"PROJECT_NAME": "demo"}, Options{}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	// The outer skeleton renders; the verbatim subtree does not — names and
+	// contents ship literally, including its own jig.json.
+	readme, err := os.ReadFile(filepath.Join(out, "demo", "README.md"))
+	if err != nil || string(readme) != "# demo" {
+		t.Fatalf("README = %q, %v", readme, err)
+	}
+	inner := filepath.Join(out, "demo", "template", "{{.PROJECT_NAME}}")
+	manifest, err := os.ReadFile(filepath.Join(inner, "jig.json"))
+	if err != nil {
+		t.Fatalf("verbatim jig.json missing: %v", err)
+	}
+	if !strings.Contains(string(manifest), `"inner"`) {
+		t.Errorf("verbatim jig.json = %q, want unrendered", manifest)
+	}
+	notes, err := os.ReadFile(filepath.Join(inner, "notes.md"))
+	if err != nil || string(notes) != "literal {{.UNDECLARED}} stays" {
+		t.Errorf("notes.md = %q, %v — want literal copy", notes, err)
+	}
+}
+
+func TestLoadManifestRejectsEscapingVerbatimPath(t *testing.T) {
+	dir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}}, "verbatim": ["../outside"]}`,
+	})
+	_, err := LoadManifest(filepath.Join(dir, TemplateDirName, ManifestFileName))
+	if err == nil || !strings.Contains(err.Error(), "verbatim path") {
+		t.Fatalf("error = %v, want verbatim path rejection", err)
 	}
 }

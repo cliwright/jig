@@ -37,6 +37,12 @@
           }
         }
       }
+    },
+    "verbatim": {
+      "description": "Directory base names whose subtrees are copied verbatim: names and contents are NOT rendered, wherever the directory sits in the skeleton. For templates that ship templates (e.g. a type's embedded template/ dir).",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
     }
   }
 }

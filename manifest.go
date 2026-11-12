@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"regexp"
 	"sort"
@@ -36,6 +37,11 @@ type Var struct {
 type Manifest struct {
 	Version   int            `json:"version"`
 	Variables map[string]Var `json:"variables"`
+	// Verbatim lists directory base names whose subtrees copy without
+	// rendering — names and contents ship as-is, wherever they sit in the
+	// skeleton. For templates that ship templates (e.g. a type's embedded
+	// template/ dir).
+	Verbatim []string `json:"verbatim,omitempty"`
 
 	patterns map[string]*regexp.Regexp // compiled from Var.Pattern at load
 }
@@ -76,6 +82,11 @@ func LoadManifest(path string) (*Manifest, error) {
 			return nil, fmt.Errorf("%s: variable %s: invalid pattern: %w", path, name, err)
 		}
 		m.patterns[name] = re
+	}
+	for _, v := range m.Verbatim {
+		if !fs.ValidPath(v) || v == "." {
+			return nil, fmt.Errorf("%s: verbatim path %q must be a relative slash path inside the template", path, v)
+		}
 	}
 	return &m, nil
 }

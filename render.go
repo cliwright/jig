@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	pathpkg "path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,8 +24,8 @@ const TemplateDirName = "{{.PROJECT_NAME}}"
 
 // Options controls one Render call.
 type Options struct {
-	// Force allows rendering into a non-empty output directory. The default
-	// refuses, so an accidental render never clobbers existing work.
+	// Force allows overwriting existing files. The default refuses, so an
+	// accidental render never clobbers existing work.
 	Force bool
 }
 
@@ -82,6 +84,11 @@ func ResolveTemplate(templatesDir, name string, version int) (string, error) {
 // outputDir/<rendered name>. values must satisfy the manifest (see
 // Manifest.Validate): rendering is hard-fail on undeclared variables
 // (missingkey=error) and on pattern mismatches.
+//
+// Rendering plans the whole tree first and refuses to overwrite any
+// existing file (unless Force), so a failed render never half-writes and a
+// render into a populated directory — e.g. another version of a type tree —
+// is fine as long as no file collides.
 func Render(versionDir, outputDir string, values map[string]string, opts Options) (*Result, error) {
 	skel := filepath.Join(versionDir, TemplateDirName)
 	m, err := LoadManifest(filepath.Join(skel, ManifestFileName))
@@ -98,11 +105,62 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 		return nil, fmt.Errorf("rendering the project directory name: %w", err)
 	}
 	dest := filepath.Join(outputDir, topName)
-	if err := checkWritable(dest, opts.Force); err != nil {
+
+	plan, err := planRender(skel, dest, values, used, m.Verbatim)
+	if err != nil {
 		return nil, err
 	}
+	if !opts.Force {
+		for _, f := range plan.files {
+			if _, err := os.Stat(f.dst); err == nil {
+				return nil, fmt.Errorf("rendering would overwrite %s (use --force to allow)", f.dst)
+			} else if !os.IsNotExist(err) {
+				return nil, fmt.Errorf("checking %s: %w", f.dst, err)
+			}
+		}
+	}
 
-	err = filepath.WalkDir(skel, func(path string, d fs.DirEntry, err error) error {
+	for _, d := range plan.dirs {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			return nil, fmt.Errorf("creating %s: %w", d, err)
+		}
+	}
+	for _, f := range plan.files {
+		if f.verbatim {
+			if err := copyFile(f.src, f.dst, f.entry); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if err := renderFile(f.src, f.dst, values, used, f.entry); err != nil {
+			return nil, err
+		}
+	}
+	return &Result{OutputDir: dest, Unused: m.Unused(used)}, nil
+}
+
+// renderPlan is the walked, name-rendered tree: directories to create and
+// files to render, in walk order.
+type renderPlan struct {
+	dirs  []string
+	files []plannedFile
+}
+
+type plannedFile struct {
+	src, dst string
+	entry    fs.DirEntry
+	verbatim bool
+}
+
+// planRender walks skel and renders every relative name, returning the work
+// without touching the filesystem. Entries beneath a manifest-declared
+// verbatim directory keep their own names unrendered, while their ancestor
+// directories render normally. WalkDir visits parents before children, so
+// each entry's output path is its parent's rendered path plus its own name.
+func planRender(skel, dest string, values map[string]string, used map[string]bool, verbatim []string) (*renderPlan, error) {
+	plan := &renderPlan{}
+	renderedDirs := map[string]string{"": dest, ".": dest}
+	err := filepath.WalkDir(skel, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -113,26 +171,64 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 		if rel == "." {
 			return nil
 		}
-		if d.IsDir() {
-			out, err := renderString(rel, values, used)
-			if err != nil {
-				return fmt.Errorf("rendering directory name %s: %w", rel, err)
-			}
-			return os.MkdirAll(filepath.Join(dest, out), 0o755)
-		}
 		if rel == ManifestFileName {
-			return nil // the manifest never renders into the output
+			return nil // the template's own manifest never renders into the output
 		}
-		out, err := renderString(rel, values, used)
-		if err != nil {
-			return fmt.Errorf("rendering file name %s: %w", rel, err)
+		relSlash := filepath.ToSlash(rel)
+		parentOut := renderedDirs[pathpkg.Dir(relSlash)]
+		name := filepath.Base(rel)
+		if !isVerbatim(relSlash, verbatim) {
+			name, err = renderString(name, values, used)
+			if err != nil {
+				kind := "file"
+				if d.IsDir() {
+					kind = "directory"
+				}
+				return fmt.Errorf("rendering %s name %s: %w", kind, rel, err)
+			}
 		}
-		return renderFile(path, filepath.Join(dest, out), values, used, d)
+		out := filepath.Join(parentOut, name)
+		if d.IsDir() {
+			renderedDirs[relSlash] = out
+			plan.dirs = append(plan.dirs, out)
+			return nil
+		}
+		plan.files = append(plan.files, plannedFile{src: path, dst: out, entry: d, verbatim: isVerbatim(relSlash, verbatim)})
+		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &Result{OutputDir: dest, Unused: m.Unused(used)}, nil
+	return plan, nil
+}
+
+// isVerbatim reports whether rel (slash form) lives beneath a directory
+// whose base name is listed in verbatim. The matched directory's own path
+// still renders — only its contents ship unrendered.
+func isVerbatim(rel string, verbatim []string) bool {
+	segments := strings.Split(rel, "/")
+	for _, segment := range segments[:len(segments)-1] {
+		if slices.Contains(verbatim, segment) {
+			return true
+		}
+	}
+	return false
+}
+
+// copyFile writes src to dst unchanged, preserving the source's mode bits.
+func copyFile(src, dst string, d fs.DirEntry) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	info, err := d.Info()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, info.Mode().Perm())
 }
 
 // renderString renders one name or path fragment as a template. The
@@ -190,20 +286,4 @@ func isBinary(data []byte) bool {
 		data = data[:sniffLen]
 	}
 	return bytes.IndexByte(data, 0) >= 0
-}
-
-// checkWritable refuses to render into an existing non-empty directory
-// unless forced.
-func checkWritable(dest string, force bool) error {
-	entries, err := os.ReadDir(dest)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	if len(entries) > 0 && !force {
-		return fmt.Errorf("output directory %s is not empty (use --force to render anyway)", dest)
-	}
-	return nil
 }
