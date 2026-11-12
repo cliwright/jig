@@ -10,6 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version is stamped at release time (goreleaser -X main.version=...);
+// builds from source report "dev".
+var version = "dev"
+
 func main() {
 	root := &cobra.Command{
 		Use:   "jig",
@@ -20,6 +24,7 @@ plus a jig.json manifest declaring the variables they prompt for.
 Templates are addressed <language>/<flavor>/<kind> with a mandatory version
 directory (v<N>) and rendered strictly: no hooks, no scripts, no arbitrary
 code execution.`,
+		Version:       version,
 		SilenceUsage: true,
 	}
 	root.AddCommand(newRenderCmd(), newNewCmd())
