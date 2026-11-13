@@ -98,3 +98,29 @@ func TestReadVarsFileRejectsNonObject(t *testing.T) {
 		t.Fatal("want an error for a non-object vars file")
 	}
 }
+
+func TestStdinPrompterShowsChoices(t *testing.T) {
+	dir := t.TempDir()
+	skel := filepath.Join(dir, TemplateDirName)
+	if err := os.MkdirAll(skel, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"version": 1, "variables": {
+		"PROJECT_NAME": {"default": "my-project"},
+		"license": {"default": "MIT", "choices": ["MIT", "Apache-2.0"]}
+	}}`
+	if err := os.WriteFile(filepath.Join(skel, ManifestFileName), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := LoadManifest(filepath.Join(skel, ManifestFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if _, err := ResolveValues(m, "", nil, StdinPrompter(strings.NewReader("\n\n"), &out)); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "license (MIT | Apache-2.0) [MIT]: ") {
+		t.Fatalf("prompt should list the choices, got %q", out.String())
+	}
+}

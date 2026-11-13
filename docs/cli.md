@@ -1,7 +1,7 @@
 # CLI reference
 
-jig has two commands: `render` (use a template) and `new` (author one).
-`jig --version` prints the version.
+jig has four commands: `render` (use a template), `new` and `bump` (author
+one), and `check` (verify one). `jig --version` prints the version.
 
 ## jig render
 
@@ -21,14 +21,25 @@ interactively for each variable the template's manifest declares.
 | `--vars-file` | — | JSON object of variable values; renders non-interactively |
 | `--var key=value` | — | Set one variable; repeatable |
 | `--force` | refuse | Overwrite existing files on collision |
+| `--trust` | reject | Allow symlinks in the template; recreated as links in the output, but only if they resolve inside the template tree |
 
 Variable precedence: manifest defaults < `--vars-file` < `--var` <
-interactive answers.
+interactive answers. An override re-derives any default built on it, so
+`--var PROJECT_NAME=x` also updates a `MODULE_NAME` defaulting to
+`{{ .PROJECT_NAME \| slugify }}`.
+
+Prompting requires an interactive terminal. `--vars-file` renders
+non-interactively; so does `--var` when stdin is not a terminal (remaining
+variables take their resolved defaults). With piped or absent stdin and no
+values at all, `render` fails fast instead of hanging on a prompt nobody
+can answer.
 
 Rendering never overwrites an existing file unless `--force` is given.
 Rendering into a populated directory is fine as long as no file collides —
 the whole render is planned first, so a collision fails before anything is
-written.
+written. Rendered names must stay inside the output directory: a value that
+renders to `../anything` or an empty name fails the render, regardless of
+what the manifest's patterns allow.
 
 ## jig new
 
@@ -39,8 +50,30 @@ jig new <language>/<flavor>/<kind> [--templates-dir <dir>]
 Scaffolds a new template to author:
 `<language>/<flavor>/<kind>/v1/{{.PROJECT_NAME}}/jig.json` plus a README to
 start from. Segments are lowercase alphanumerics and hyphens, starting with
-a letter. Fails if the template already exists — bump to `v2` by hand when
-you need a breaking change.
+a letter. Fails if the template already exists — use `jig bump` when you
+need a new version.
+
+## jig bump
+
+```sh
+jig bump <language>/<flavor>/<kind> [--templates-dir <dir>]
+```
+
+Copies the template's latest version directory to `v<N+1>` as the starting
+point for its next iteration. Old versions stay put; renders pin theirs
+with `--version`. Refuses symlinks, matching the default render policy.
+
+## jig check
+
+```sh
+jig check --template <name-or-path> [--version N] [--templates-dir <dir>]
+```
+
+Dry-renders a template without writing anything: the manifest is validated,
+every file and directory name and every text file's content is parsed and
+rendered against the resolved defaults, and declared-but-unused variables
+print as warnings. Exits non-zero on any error — run it before shipping a
+template, and in CI.
 
 ## JIG_TEMPLATES_DIR
 

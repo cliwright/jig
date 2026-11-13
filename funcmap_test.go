@@ -18,8 +18,12 @@ func TestSlugify(t *testing.T) {
 }
 
 func TestReplace(t *testing.T) {
-	if got := replace("a-b-c", "-", "_"); got != "a_b_c" {
+	if got := replace("-", "_", "a-b-c"); got != "a_b_c" {
 		t.Errorf("replace = %q", got)
+	}
+	got, err := renderString(`{{ .name | replace "-" "_" }}`, map[string]string{"name": "a-b"}, map[string]bool{})
+	if err != nil || got != "a_b" {
+		t.Errorf("pipeline replace = %q, %v", got, err)
 	}
 }
 

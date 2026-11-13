@@ -31,9 +31,16 @@
             "type": "string"
           },
           "pattern": {
-            "description": "Regex the final value must match (RE2 syntax).",
+            "description": "Regex the final value must match (RE2 syntax). Mutually exclusive with choices.",
             "type": "string",
             "format": "regex"
+          },
+          "choices": {
+            "description": "Fixed set of allowed values. Mutually exclusive with pattern; the default must be one of them.",
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "uniqueItems": true
           }
         }
       }

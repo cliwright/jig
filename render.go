@@ -27,6 +27,11 @@ type Options struct {
 	// Force allows overwriting existing files. The default refuses, so an
 	// accidental render never clobbers existing work.
 	Force bool
+	// Trust allows symlinks in the template: they are recreated as symlinks
+	// in the output. The default rejects them — a registry-distributed
+	// template is data, and links can point anywhere. Even under Trust,
+	// links resolving outside the template tree are refused.
+	Trust bool
 }
 
 // Result reports what one Render did.
@@ -104,9 +109,12 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 	if err != nil {
 		return nil, fmt.Errorf("rendering the project directory name: %w", err)
 	}
-	dest := filepath.Join(outputDir, topName)
+	dest, err := containedPath(outputDir, topName)
+	if err != nil {
+		return nil, fmt.Errorf("rendering the project directory name: %w", err)
+	}
 
-	plan, err := planRender(skel, dest, values, used, m.Verbatim)
+	plan, err := planRender(skel, dest, values, used, m.Verbatim, opts.Trust)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +134,15 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 		}
 	}
 	for _, f := range plan.files {
+		if f.linkTarget != "" {
+			if err := os.MkdirAll(filepath.Dir(f.dst), 0o755); err != nil {
+				return nil, err
+			}
+			if err := os.Symlink(f.linkTarget, f.dst); err != nil {
+				return nil, fmt.Errorf("linking %s: %w", f.dst, err)
+			}
+			continue
+		}
 		if f.verbatim {
 			if err := copyFile(f.src, f.dst, f.entry); err != nil {
 				return nil, err
@@ -147,9 +164,10 @@ type renderPlan struct {
 }
 
 type plannedFile struct {
-	src, dst string
-	entry    fs.DirEntry
-	verbatim bool
+	src, dst   string
+	entry      fs.DirEntry
+	verbatim   bool
+	linkTarget string // non-empty: recreate as a symlink with this target
 }
 
 // planRender walks skel and renders every relative name, returning the work
@@ -157,7 +175,9 @@ type plannedFile struct {
 // verbatim directory keep their own names unrendered, while their ancestor
 // directories render normally. WalkDir visits parents before children, so
 // each entry's output path is its parent's rendered path plus its own name.
-func planRender(skel, dest string, values map[string]string, used map[string]bool, verbatim []string) (*renderPlan, error) {
+// Symlinks are rejected unless trust is set; trusted links must resolve
+// inside the template tree and are recreated as links in the output.
+func planRender(skel, dest string, values map[string]string, used map[string]bool, verbatim []string, trust bool) (*renderPlan, error) {
 	plan := &renderPlan{}
 	renderedDirs := map[string]string{"": dest, ".": dest}
 	err := filepath.WalkDir(skel, func(path string, d fs.DirEntry, err error) error {
@@ -177,20 +197,33 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 		relSlash := filepath.ToSlash(rel)
 		parentOut := renderedDirs[pathpkg.Dir(relSlash)]
 		name := filepath.Base(rel)
+		kind := "file"
+		if d.IsDir() {
+			kind = "directory"
+		} else if d.Type()&fs.ModeSymlink != 0 {
+			kind = "symlink"
+		}
 		if !isVerbatim(relSlash, verbatim) {
 			name, err = renderString(name, values, used)
 			if err != nil {
-				kind := "file"
-				if d.IsDir() {
-					kind = "directory"
-				}
 				return fmt.Errorf("rendering %s name %s: %w", kind, rel, err)
 			}
 		}
-		out := filepath.Join(parentOut, name)
+		out, err := containedPath(parentOut, name)
+		if err != nil {
+			return fmt.Errorf("rendering %s name %s: %w", kind, rel, err)
+		}
 		if d.IsDir() {
 			renderedDirs[relSlash] = out
 			plan.dirs = append(plan.dirs, out)
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			linkTarget, err := checkSymlink(skel, path, trust)
+			if err != nil {
+				return err
+			}
+			plan.files = append(plan.files, plannedFile{src: path, dst: out, entry: d, linkTarget: linkTarget})
 			return nil
 		}
 		plan.files = append(plan.files, plannedFile{src: path, dst: out, entry: d, verbatim: isVerbatim(relSlash, verbatim)})
@@ -200,6 +233,57 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 		return nil, err
 	}
 	return plan, nil
+}
+
+// checkSymlink vets a symlink found in the template. Links are rejected
+// unless trust is set; a trusted link must resolve inside the template tree,
+// so even a trusted template cannot smuggle in a pointer to the host
+// filesystem. Returns the link target to recreate in the output.
+func checkSymlink(skel, path string, trust bool) (string, error) {
+	if !trust {
+		return "", fmt.Errorf("template contains symlink %s: templates must not contain symlinks (use --trust to allow links inside the template tree)", path)
+	}
+	target, err := os.Readlink(path)
+	if err != nil {
+		return "", fmt.Errorf("reading symlink %s: %w", path, err)
+	}
+	resolved := target
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(filepath.Dir(path), resolved)
+	}
+	root, err := filepath.Abs(skel)
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(resolved)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("symlink %s points outside the template tree (%s)", path, target)
+	}
+	return target, nil
+}
+
+// containedPath joins base and a rendered name, refusing results that escape
+// base: rendered values come from user input, so jig enforces containment
+// itself rather than trusting every manifest's validation pattern. Interior
+// slashes are fine (a name may render to a nested path); empty names, ".."
+// segments, and absolute results are not.
+func containedPath(base, name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("rendered an empty name")
+	}
+	out := filepath.Join(base, name)
+	rel, err := filepath.Rel(base, out)
+	if err != nil {
+		return "", fmt.Errorf("rendered name %q: %w", name, err)
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("rendered name %q escapes the output directory", name)
+	}
+	return out, nil
 }
 
 // isVerbatim reports whether rel (slash form) lives beneath a directory
@@ -248,25 +332,35 @@ func renderString(s string, values map[string]string, used map[string]bool) (str
 	return buf.String(), nil
 }
 
-// renderFile writes one rendered file: binaries copy verbatim (detected by
-// content, not extension), text renders through text/template. The source
-// file's mode bits are preserved so templates can ship executables.
-func renderFile(src, dst string, values map[string]string, used map[string]bool, d fs.DirEntry) error {
+// renderContent renders one file's content in memory: binaries pass through
+// unchanged (detected by content, not extension), text renders through
+// text/template.
+func renderContent(src string, values map[string]string, used map[string]bool) ([]byte, error) {
 	data, err := os.ReadFile(src)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !isBinary(data) {
-		t, err := template.New(filepath.Base(src)).Funcs(FuncMap).Option("missingkey=error").Parse(string(data))
-		if err != nil {
-			return fmt.Errorf("parsing %s: %w", src, err)
-		}
-		collectUsed(t.Tree.Root, used)
-		var buf bytes.Buffer
-		if err := t.Execute(&buf, values); err != nil {
-			return fmt.Errorf("rendering %s: %w", src, err)
-		}
-		data = buf.Bytes()
+	if isBinary(data) {
+		return data, nil
+	}
+	t, err := template.New(filepath.Base(src)).Funcs(FuncMap).Option("missingkey=error").Parse(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", src, err)
+	}
+	collectUsed(t.Tree.Root, used)
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, values); err != nil {
+		return nil, fmt.Errorf("rendering %s: %w", src, err)
+	}
+	return buf.Bytes(), nil
+}
+
+// renderFile writes one rendered file. The source file's mode bits are
+// preserved so templates can ship executables.
+func renderFile(src, dst string, values map[string]string, used map[string]bool, d fs.DirEntry) error {
+	data, err := renderContent(src, values, used)
+	if err != nil {
+		return err
 	}
 	info, err := d.Info()
 	if err != nil {

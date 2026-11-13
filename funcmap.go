@@ -16,8 +16,9 @@ var FuncMap = template.FuncMap{
 	"slugify": slugify,
 }
 
-// replace implements {{ replace .Var "old" "new" }} — all occurrences.
-func replace(s, old, new string) string {
+// replace implements {{ .Var | replace "old" "new" }} — all occurrences.
+// The string comes last so the pipeline form works.
+func replace(old, new, s string) string {
 	return strings.ReplaceAll(s, old, new)
 }
 

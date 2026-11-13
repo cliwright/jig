@@ -11,8 +11,11 @@ import (
 	"io/fs"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
+	"text/template"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
@@ -25,12 +28,15 @@ import (
 const ReservedProjectName = "PROJECT_NAME"
 
 // Var is one declared template variable: its default (required), optional
-// prompt text for interactive mode, and an optional validation pattern the
-// final value must match.
+// prompt text for interactive mode, and an optional validation the final
+// value must pass — either a pattern or a fixed set of choices, never both.
+// The default may template over other variables ("{{ .PROJECT_NAME |
+// slugify }}"); see Manifest.parseDefaults.
 type Var struct {
-	Default string `json:"default"`
-	Prompt  string `json:"prompt,omitempty"`
-	Pattern string `json:"pattern,omitempty"`
+	Default string   `json:"default"`
+	Prompt  string   `json:"prompt,omitempty"`
+	Pattern string   `json:"pattern,omitempty"`
+	Choices []string `json:"choices,omitempty"`
 }
 
 // Manifest is the typed view of jig.json.
@@ -43,7 +49,10 @@ type Manifest struct {
 	// template/ dir).
 	Verbatim []string `json:"verbatim,omitempty"`
 
-	patterns map[string]*regexp.Regexp // compiled from Var.Pattern at load
+	patterns   map[string]*regexp.Regexp     // compiled from Var.Pattern at load
+	order      []string                      // variables in dependency-resolved evaluation order
+	defaults   map[string]*template.Template // parsed Var.Default per variable
+	referenced map[string]bool               // variables another variable's default derives from
 }
 
 // LoadManifest reads path, validates it against the embedded manifest
@@ -74,6 +83,12 @@ func LoadManifest(path string) (*Manifest, error) {
 	}
 	m.patterns = make(map[string]*regexp.Regexp, len(m.Variables))
 	for name, v := range m.Variables {
+		if v.Pattern != "" && len(v.Choices) > 0 {
+			return nil, fmt.Errorf("%s: variable %s: pattern and choices are mutually exclusive", path, name)
+		}
+		if len(v.Choices) > 0 && !slices.Contains(v.Choices, v.Default) && !strings.Contains(v.Default, "{{") {
+			return nil, fmt.Errorf("%s: variable %s: default %q is not one of its choices %v", path, name, v.Default, v.Choices)
+		}
 		if v.Pattern == "" {
 			continue
 		}
@@ -88,7 +103,70 @@ func LoadManifest(path string) (*Manifest, error) {
 			return nil, fmt.Errorf("%s: verbatim path %q must be a relative slash path inside the template", path, v)
 		}
 	}
+	if err := m.parseDefaults(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	return &m, nil
+}
+
+// parseDefaults compiles every variable's Default as a template and derives
+// the evaluation order: a default may reference other variables
+// ("{{ .PROJECT_NAME | slugify }}"), so defaults resolve in dependency
+// order. References to undeclared variables, self-references, and cycles
+// are load errors — a broken manifest never reaches a prompt.
+func (m *Manifest) parseDefaults() error {
+	m.defaults = make(map[string]*template.Template, len(m.Variables))
+	m.referenced = map[string]bool{}
+	dependents := map[string][]string{}
+	indegree := map[string]int{}
+	for _, name := range m.Names() {
+		t, err := template.New("default:" + name).Funcs(FuncMap).Option("missingkey=error").Parse(m.Variables[name].Default)
+		if err != nil {
+			return fmt.Errorf("variable %s: invalid default: %w", name, err)
+		}
+		m.defaults[name] = t
+		deps := map[string]bool{}
+		collectUsed(t.Tree.Root, deps)
+		for dep := range deps {
+			if dep == name {
+				return fmt.Errorf("variable %s: default references itself", name)
+			}
+			if _, ok := m.Variables[dep]; !ok {
+				return fmt.Errorf("variable %s: default references undeclared variable %s", name, dep)
+			}
+			dependents[dep] = append(dependents[dep], name)
+			indegree[name]++
+			m.referenced[dep] = true
+		}
+	}
+	var ready []string
+	for _, name := range m.Names() {
+		if indegree[name] == 0 {
+			ready = append(ready, name)
+		}
+	}
+	for len(ready) > 0 {
+		name := ready[0]
+		ready = ready[1:]
+		m.order = append(m.order, name)
+		for _, dep := range dependents[name] {
+			if indegree[dep]--; indegree[dep] == 0 {
+				ready = append(ready, dep)
+			}
+		}
+		sort.Strings(ready)
+	}
+	if len(m.order) != len(m.Variables) {
+		var cyclic []string
+		for name, n := range indegree {
+			if n > 0 {
+				cyclic = append(cyclic, name)
+			}
+		}
+		sort.Strings(cyclic)
+		return fmt.Errorf("cyclic defaults involving %v", cyclic)
+	}
+	return nil
 }
 
 // Validate checks values against the manifest: every supplied variable must
@@ -106,6 +184,11 @@ func (m *Manifest) Validate(values map[string]string) error {
 			return fmt.Errorf("variable %s: value %q does not match pattern %q", name, values[name], m.Variables[name].Pattern)
 		}
 	}
+	for _, name := range sortedKeys(m.Variables) {
+		if v := m.Variables[name]; len(v.Choices) > 0 && !slices.Contains(v.Choices, values[name]) {
+			return fmt.Errorf("variable %s: value %q is not one of its choices %v", name, values[name], v.Choices)
+		}
+	}
 	return nil
 }
 
@@ -116,24 +199,42 @@ func (m *Manifest) Names() []string {
 
 // Unused reports declared variables that never appear in any rendered
 // content — a cruft warning for template authors. used is the set of
-// variable names collected during a dry render.
+// variable names collected during a dry render; variables referenced by
+// another variable's default count as used.
 func (m *Manifest) Unused(used map[string]bool) []string {
 	var out []string
 	for name := range m.Variables {
-		if !used[name] {
+		if !used[name] && !m.referenced[name] {
 			out = append(out, name)
 		}
 	}
 	return out
 }
 
-// Defaults returns every variable's default value.
-func (m *Manifest) Defaults() map[string]string {
-	out := make(map[string]string, len(m.Variables))
-	for name, v := range m.Variables {
-		out[name] = v.Default
+// Defaults returns every variable's resolved default value.
+func (m *Manifest) Defaults() (map[string]string, error) {
+	return m.resolveDefaults(nil)
+}
+
+// resolveDefaults evaluates defaults in dependency order. A variable with an
+// explicit override takes the override; its dependents then derive from the
+// overridden value, so --var PROJECT_NAME=x re-derives everything built on
+// PROJECT_NAME. Overrides for undeclared variables are ignored here —
+// Validate reports them.
+func (m *Manifest) resolveDefaults(overrides map[string]string) (map[string]string, error) {
+	values := make(map[string]string, len(m.Variables))
+	for _, name := range m.order {
+		if v, ok := overrides[name]; ok {
+			values[name] = v
+			continue
+		}
+		var buf bytes.Buffer
+		if err := m.defaults[name].Execute(&buf, values); err != nil {
+			return nil, fmt.Errorf("variable %s: resolving default: %w", name, err)
+		}
+		values[name] = buf.String()
 	}
-	return out
+	return values, nil
 }
 
 func sortedKeys[V any](m map[string]V) []string {

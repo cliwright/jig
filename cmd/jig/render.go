@@ -19,6 +19,7 @@ func newRenderCmd() *cobra.Command {
 		varsFile     string
 		varFlags     []string
 		force        bool
+		trust        bool
 	)
 	cmd := &cobra.Command{
 		Use:   "render",
@@ -42,7 +43,7 @@ no file collides.`,
 			if output == "" {
 				return fmt.Errorf("--output is required")
 			}
-			return runRender(cmd, templateArg, output, version, templatesDir, varsFile, varFlags, force)
+			return runRender(cmd, templateArg, output, version, templatesDir, varsFile, varFlags, force, trust)
 		},
 	}
 	f := cmd.Flags()
@@ -53,10 +54,11 @@ no file collides.`,
 	f.StringVar(&varsFile, "vars-file", "", "JSON file of variable values (non-interactive)")
 	f.StringArrayVar(&varFlags, "var", nil, "set a variable (key=value, repeatable)")
 	f.BoolVar(&force, "force", false, "overwrite existing files on collision (default: refuse)")
+	f.BoolVar(&trust, "trust", false, "allow symlinks inside the template tree (default: reject)")
 	return cmd
 }
 
-func runRender(cmd *cobra.Command, templateArg, output string, version int, templatesDir, varsFile string, varFlags []string, force bool) error {
+func runRender(cmd *cobra.Command, templateArg, output string, version int, templatesDir, varsFile string, varFlags []string, force, trust bool) error {
 	if templatesDir == "" {
 		templatesDir = "."
 	}
@@ -71,14 +73,25 @@ func runRender(cmd *cobra.Command, templateArg, output string, version int, temp
 
 	var prompt jig.Prompter
 	if varsFile == "" {
-		prompt = jig.StdinPrompter(cmd.InOrStdin(), cmd.OutOrStdout())
+		interactive := true
+		if f, ok := cmd.InOrStdin().(*os.File); ok {
+			if st, err := f.Stat(); err == nil && st.Mode()&os.ModeCharDevice == 0 {
+				interactive = false
+			}
+		}
+		if !interactive && len(varFlags) == 0 {
+			return fmt.Errorf("stdin is not interactive: provide values with --vars-file or --var")
+		}
+		if interactive {
+			prompt = jig.StdinPrompter(cmd.InOrStdin(), cmd.OutOrStdout())
+		}
 	}
 	values, err := jig.ResolveValues(m, varsFile, varFlags, prompt)
 	if err != nil {
 		return err
 	}
 
-	res, err := jig.Render(dir, output, values, jig.Options{Force: force})
+	res, err := jig.Render(dir, output, values, jig.Options{Force: force, Trust: trust})
 	if err != nil {
 		return err
 	}

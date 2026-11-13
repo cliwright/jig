@@ -29,8 +29,10 @@ possible.
 | --- | --- | --- | --- |
 | `lower` | `lower s` | `{{lower .TITLE}}` | `My-Project` → `my-project` |
 | `upper` | `upper s` | `{{upper .KIND}}` | `tool` → `TOOL` |
-| `replace` | `replace s old new` | `{{replace .PROJECT_NAME "-" "_"}}` | `my-project` → `my_project` |
+| `replace` | `replace old new s` | `{{.PROJECT_NAME \| replace "-" "_"}}` | `my-project` → `my_project` |
 | `slugify` | `slugify s` | `{{slugify .TITLE}}` | `My Cool App!` → `my-cool-app` |
+
+`replace` takes the string last so it composes in pipelines.
 
 `slugify` lowercases and collapses every run of characters outside
 `[a-z0-9-]` into a single dash, trimming leading and trailing dashes —
@@ -43,6 +45,9 @@ A typical use is deriving consistent names from one answer:
 name = "{{.PROJECT_NAME}}"
 
 [tool.example]
-package = "{{replace .PROJECT_NAME \"-\" \"_\"}}"
+package = "{{.PROJECT_NAME | replace \"-\" \"_\"}}"
 module  = "github.com/example/{{slugify .PROJECT_NAME}}"
 ```
+
+Derivations this common are often better declared once, in the manifest —
+see [derived defaults](manifest.md#derived-defaults).

@@ -25,6 +25,9 @@ func StdinPrompter(in io.Reader, out io.Writer) Prompter {
 			if label == "" {
 				label = name
 			}
+			if len(v.Choices) > 0 {
+				label = fmt.Sprintf("%s (%s)", label, strings.Join(v.Choices, " | "))
+			}
 			fmt.Fprintf(out, "%s [%s]: ", label, values[name])
 			answer, err := reader.ReadString('\n')
 			if err != nil {
@@ -39,19 +42,21 @@ func StdinPrompter(in io.Reader, out io.Writer) Prompter {
 }
 
 // ResolveValues builds the final variable values for a render over m:
-// manifest defaults, overlaid by varsFile (when non-empty) and then by the
-// key=value pairs in set, and finally passed to prompt (when non-nil).
-// Later sources win. The result is not validated here — Render validates
-// values against the manifest, patterns included.
+// defaults resolved in dependency order, with varsFile (when non-empty) and
+// then the key=value pairs in set as explicit overrides, and finally passed
+// to prompt (when non-nil). An override wins for its variable; defaults
+// derived from it re-evaluate against the overridden value. Later sources
+// win. The result is not validated here — Render validates values against
+// the manifest, patterns included.
 func ResolveValues(m *Manifest, varsFile string, set []string, prompt Prompter) (map[string]string, error) {
-	values := m.Defaults()
+	overrides := map[string]string{}
 	if varsFile != "" {
 		fromFile, err := ReadVarsFile(varsFile)
 		if err != nil {
 			return nil, err
 		}
 		for k, v := range fromFile {
-			values[k] = v
+			overrides[k] = v
 		}
 	}
 	for _, kv := range set {
@@ -59,7 +64,16 @@ func ResolveValues(m *Manifest, varsFile string, set []string, prompt Prompter) 
 		if !ok {
 			return nil, fmt.Errorf("variable override %q: want key=value", kv)
 		}
-		values[key] = value
+		overrides[key] = value
+	}
+	values, err := m.resolveDefaults(overrides)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range overrides {
+		if _, ok := m.Variables[k]; !ok {
+			values[k] = v // undeclared: Validate reports it
+		}
 	}
 	if prompt != nil {
 		if err := prompt(m, values); err != nil {

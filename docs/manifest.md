@@ -41,17 +41,38 @@ itself never renders into the output as it is the template's own metadata.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `default` | yes | Value used when the variable is not given otherwise |
+| `default` | yes | Value used when the variable is not given otherwise; may template over other variables |
 | `prompt` | no | Question shown in interactive mode |
-| `pattern` | no | RE2 regular expression the final value must match |
+| `pattern` | no | RE2 regular expression the final value must match (exclusive with `choices`) |
+| `choices` | no | Fixed set of allowed values (exclusive with `pattern`) |
 
 `PROJECT_NAME` is reserved and **must** be declared: the skeleton's
 top-level directory is named `{{.PROJECT_NAME}}`, and the rendered output
 directory takes its rendered value.
 
 Patterns are validated at load time (they must compile) and every value is
-checked against its pattern at render time — including defaults, so keep
-the two consistent.
+checked against its pattern or choices at render time — including defaults,
+so keep the two consistent. For `choices`, a static default must be one of
+the listed values.
+
+## Derived defaults
+
+A default may reference other variables with the full template syntax:
+
+```json
+{
+  "variables": {
+    "PROJECT_NAME": { "default": "my-project", "pattern": "^[a-z][a-z0-9-]*$" },
+    "PKG": { "default": "{{ .PROJECT_NAME | replace \"-\" \"_\" }}" }
+  }
+}
+```
+
+Defaults resolve in dependency order: references to undeclared variables,
+self-references, and cycles fail at load time. An explicit value
+(`--vars-file`, `--var`, or an interactive answer) wins for its variable,
+and everything derived from it re-evaluates against the given value —
+answering `PROJECT_NAME` differently also fixes `PKG`.
 
 ## Rendering rules
 
@@ -62,9 +83,17 @@ the two consistent.
 - Using an **undeclared variable** anywhere in a name or body fails the
   render — the manifest is the whole contract.
 - Declaring a variable the template never uses is not an error, but jig
-  prints a warning so manifests don't collect cruft.
+  prints a warning so manifests don't collect cruft. (A variable referenced
+  by another variable's default counts as used.)
+- Rendered names must stay **inside the output directory** — values that
+  render to `../…` or empty names fail the render no matter what the
+  manifest allows.
+- **Symlinks are rejected** by default; `jig render --trust` recreates them
+  in the output, but only if they resolve inside the template tree.
 - The whole render is planned before anything is written: a collision or a
   bad template fails without leaving a half-rendered tree.
+- `jig check` dry-renders all of this without writing — run it before
+  shipping a template.
 
 ## Verbatim directories
 

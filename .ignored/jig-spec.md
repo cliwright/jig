@@ -37,6 +37,43 @@ Create a stand alone cli application + reusable Go library that renders project 
    `.empty`) are ordinary files: rendered with their parent directory,
    no special handling.
 
+## Locked decisions (2026-11-13)
+
+7. **jig enforces path containment itself.** Rendered names (from user
+   input via variable values) must stay inside the output directory:
+   empty names, `..` segments, and absolute results are hard errors,
+   regardless of what a manifest's validation patterns allow. Interior
+   slashes are fine — a name may render to a nested path.
+8. **No symlinks by default; `--trust` opts in.** Templates must not
+   contain symlinks; a template holding one fails to render. `--trust`
+   recreates them as symlinks in the output, but links resolving
+   outside the template tree are still refused — trust is about
+   intent, not containment.
+9. **Derived defaults.** A variable's `default` may template over
+   other variables (`{{ .PROJECT_NAME | slugify }}`). Defaults resolve
+   in dependency order at load; undeclared references, self-references,
+   and cycles are load errors. Explicit overrides win per-variable and
+   re-derive their dependents. A variable referenced by another
+   variable's default counts as used (no cruft warning).
+10. **`choices` for enum variables.** Mutually exclusive with
+    `pattern`; a static default must be one of the choices. Interactive
+    prompts list the options.
+11. **`jig check` dry-renders.** Validates the manifest, parses and
+    renders every name and text file against the resolved defaults,
+    reports unused variables; writes nothing; exits non-zero on error.
+    The author-facing answer to "deployed a broken template".
+12. **`jig bump` copies latest v<N> → v<N+1>.** Author-side version
+    iteration; refuses symlinks like an untrusted render.
+13. **Prompting requires a TTY.** `--vars-file` is non-interactive; so is
+    `--var` when stdin is not a terminal (the rest take defaults).
+    Non-interactive stdin with no values at all → hard error naming
+    `--vars-file`/`--var`, instead of hanging on a prompt nobody can
+    answer.
+14. **Overwrite semantics (corrects "Rendering rules" below).** The
+    unit of refusal is the FILE, not the output directory: rendering
+    into a populated directory is allowed as long as no planned file
+    collides; `--force` overrides per file.
+
 ## Features
 
 1. CLI entrypoint `jig`, built with cobra.
@@ -99,8 +136,8 @@ jig render --template path/to/foo --output path/to/target
   with text/template + the func map.
 - Binary files: copied verbatim (detected by content sniffing, not
   extension lists).
-- Overwrite behavior: refuse to render into a non-empty output
-  directory; `--force` overrides.
+- Overwrite behavior (superseded by decision 14): refuse to render
+  into a non-empty output directory; `--force` overrides.
 - Post-render steps (repo wiring, provenance stamps, next-step hints)
   are the CALLER's job, never jig's and never the template's — jig
   renders files and exits.
