@@ -4,9 +4,35 @@
   </a>
 </p>
 
-Render project templates — no hooks, no code execution. Templates are data:
-inert directories of Go `text/template` files plus a `jig.json` manifest
-declaring the variables to prompt for.
+## A Project Scaffolder
+
+`jig` is a project scaffolding tool that consists of project files and a `jig.json` manifest. 
+One Go binary, no runtime, no plugins, no setup execution. 
+
+## Why "jig"?
+
+> A jig is a device or template that guides a tool relative to a workpiece
+> to ensure accuracy, safety and repeatability.
+
+## Templates are data
+
+Most scaffolding tools run code at scaffold time — hooks, scripts, "setup"
+steps baked into the template. jig made the opposite choice on purpose:
+**rendering never executes anything.** A template is exactly what you see in
+its directory — file names and file contents, with variables where you want
+them. That buys you:
+
+- **Auditability.** You can read a template top to bottom and know exactly
+  what lands on disk. Fetching and rendering a template you didn't write is
+  safe, because there is nothing in it that *can* run.
+- **Diffability.** A template change is a plain text diff. Reviewing one is
+  reviewing the scaffold itself.
+- **Predictability.** The same template with the same values renders the
+  same tree, every time, on every machine.
+
+The trade-off is deliberate: anything a hook could do, jig refuses to do. If
+a project needs a setup step, that step belongs in the project's own
+tooling — documented in its README, run by a human who can see it.
 
 ## Install
 
@@ -20,24 +46,38 @@ or with Go:
 go install github.com/cliwright/jig/cmd/jig@latest
 ```
 
-## Quick start
+## Quickstart
 
-Render a template, prompting for its declared variables:
-
-```sh
-jig render python/std/lib --templates-dir ./templates --output ./libs
-```
-
-Scaffold a new template to author your own:
+Scaffold a template, fill it in, render it:
 
 ```sh
 jig new python/std/lib --templates-dir ./templates
 ```
 
-Templates are addressed `<language>/<flavor>/<kind>` and versioned (`v1`,
-`v2`, …) — the latest renders unless `--version` says otherwise.
+This creates `templates/python/std/lib/v1/{{.PROJECT_NAME}}/` with a starter
+`jig.json` and README. Edit the skeleton — any file or directory name may
+contain `{{.PROJECT_NAME}}` or another declared variable — then render:
+
+```sh
+jig render --template python/std/lib --templates-dir ./templates --output ./libs
+```
+
+jig prompts for each variable the manifest declares. For scripts and CI:
+
+```sh
+jig render --template python/std/lib --output ./libs \
+  --vars-file values.json --var PROJECT_NAME=widget
+```
+
+
+
+That is the aim of the jig project template renderer: guide the render —
+accurately, safely, repeatably — and never execute it.
 
 ## Read next
 
-- [github.com/cliwright/jig](https://github.com/cliwright/jig) — source,
-  issues, and releases.
+- [CLI reference](cli.md) — commands, flags, and `JIG_TEMPLATES_DIR`.
+- [The `jig.json` manifest](manifest.md) — variables, patterns, verbatim
+  directories.
+- [Example layouts](example_layouts.md) — what templates look like in
+  practice.

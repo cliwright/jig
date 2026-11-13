@@ -6,6 +6,9 @@ extra_css = ["stylesheets/extra.css"]
 
 nav = [
   { "Home" = "index.md" },
+  { "CLI" = "cli.md" },
+  { "Manifest" = "manifest.md" },
+  { "Example Layouts" = "example_layouts.md" },
 ]
 
 [project.theme]

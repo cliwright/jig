@@ -29,7 +29,11 @@ func newRenderCmd() *cobra.Command {
 --templates-dir with the latest version unless --version is given) or a
 direct path to a template version directory. Interactive prompting runs
 unless --vars-file is given; --var key=value overrides individual
-variables. Precedence: defaults < vars-file < --var < interactive answers.`,
+variables. Precedence: defaults < vars-file < --var < interactive answers.
+
+Rendering never executes code and never overwrites existing files unless
+--force is given; rendering into a populated directory is fine as long as
+no file collides.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if templateArg == "" {
@@ -48,7 +52,7 @@ variables. Precedence: defaults < vars-file < --var < interactive answers.`,
 	f.StringVar(&templatesDir, "templates-dir", os.Getenv("JIG_TEMPLATES_DIR"), "template registry root (default: $JIG_TEMPLATES_DIR or the current directory)")
 	f.StringVar(&varsFile, "vars-file", "", "JSON file of variable values (non-interactive)")
 	f.StringArrayVar(&varFlags, "var", nil, "set a variable (key=value, repeatable)")
-	f.BoolVar(&force, "force", false, "render even if the output directory is not empty")
+	f.BoolVar(&force, "force", false, "overwrite existing files on collision (default: refuse)")
 	return cmd
 }
 

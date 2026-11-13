@@ -6,7 +6,8 @@
 
 Render project templates — no hooks, no code execution. Templates are data:
 inert directories of Go `text/template` files plus a `jig.json` manifest
-declaring the variables to prompt for.
+declaring the variables to prompt for. A single Go binary, nothing else to
+install.
 
 > **Source of truth:** jig is developed in a private monorepo and this
 > repository is a published mirror, kept in sync automatically. Please open
@@ -26,20 +27,20 @@ or with Go:
 go install github.com/cliwright/jig/cmd/jig@latest
 ```
 
-## Usage
-
-Render a template (prompting for its variables):
+## Quickstart
 
 ```sh
-jig render python/std/lib --templates-dir ./templates --output ./libs
-```
-
-Scaffold a new template to author your own:
-
-```sh
+# scaffold a new template to author your own
 jig new python/std/lib --templates-dir ./templates
+
+# render it into a new project (prompts for its variables)
+jig render --template python/std/lib --templates-dir ./templates --output ./libs
 ```
 
-Templates are addressed `<language>/<flavor>/<kind>` and versioned (`v1`,
-`v2`, …); the latest renders unless `--version` says otherwise. See
-[`docs/`](docs/) for authoring and the manifest reference.
+Set `JIG_TEMPLATES_DIR` once and drop `--templates-dir` from every command.
+
+## Documentation
+
+Full docs live in [`docs/`](docs/index.md): the
+[CLI reference](docs/cli.md), the [`jig.json` manifest](docs/manifest.md),
+and [example layouts](docs/example_layouts.md).
