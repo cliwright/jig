@@ -1,13 +1,14 @@
 [project]
 site_name = "jig"
 site_description = "Render project templates — no hooks, no code execution, templates are data"
-site_url = "https://github.com/cliwright/jig"
+site_url = "https://jig.cliwright.dev"
 extra_css = ["stylesheets/extra.css"]
 
 nav = [
   { "Home" = "index.md" },
   { "CLI" = "cli.md" },
   { "Manifest" = "manifest.md" },
+  { "Implementation" = "implementation.md" },
   { "Example Layouts" = "example_layouts.md" },
 ]
 

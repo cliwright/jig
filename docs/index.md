@@ -6,27 +6,37 @@
 
 ## A Project Scaffolder
 
-`jig` is a project scaffolding tool that consists of project files and a `jig.json` manifest. 
-One Go binary, no runtime, no plugins, no setup execution. 
+`jig` is a project scaffolding tool. A template is a directory of project
+files plus a `jig.json` manifest declaring its variables. One Go binary, no
+runtime, no plugins, no code execution at scaffold time — simple scaffolds,
+safe and repeatable.
 
 ## Why "jig"?
 
 > A jig is a device or template that guides a tool relative to a workpiece
 > to ensure accuracy, safety and repeatability.
 
-## Templates are data
+This is the aim of `jig`: guide the render accurately, safely and repeatably.
 
-Most scaffolding tools run code at scaffold time — hooks, scripts, "setup"
-steps baked into the template. jig made the opposite choice on purpose:
-**rendering never executes anything.** A template is exactly what you see in
-its directory — file names and file contents, with variables where you want
-them. That buys you:
+## No hooks, by design
+
+Most scaffolding tools run arbitrary code at scaffold time. Hooks, scripts and "setup"
+baked into the template expose you to potential security risks.
+
+`jig` does the opposite:
+
+**rendering never executes anything.** A template is WYSIWYG: file names and
+file contents, with variables only where you need them.
+
+This buys you:
 
 - **Auditability.** You can read a template top to bottom and know exactly
   what lands on disk. Fetching and rendering a template you didn't write is
   safe, because there is nothing in it that *can* run.
+
 - **Diffability.** A template change is a plain text diff. Reviewing one is
   reviewing the scaffold itself.
+
 - **Predictability.** The same template with the same values renders the
   same tree, every time, on every machine.
 
@@ -69,15 +79,12 @@ jig render --template python/std/lib --output ./libs \
   --vars-file values.json --var PROJECT_NAME=widget
 ```
 
-
-
-That is the aim of the jig project template renderer: guide the render —
-accurately, safely, repeatably — and never execute it.
-
 ## Read next
 
 - [CLI reference](cli.md) — commands, flags, and `JIG_TEMPLATES_DIR`.
 - [The `jig.json` manifest](manifest.md) — variables, patterns, verbatim
   directories.
+- [Implementation](implementation.md) — Go `text/template` syntax and the
+  built-in string helpers.
 - [Example layouts](example_layouts.md) — what templates look like in
   practice.

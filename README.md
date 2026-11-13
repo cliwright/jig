@@ -4,10 +4,14 @@
   </a>
 </p>
 
-Render project templates — no hooks, no code execution. Templates are data:
-inert directories of Go `text/template` files plus a `jig.json` manifest
-declaring the variables to prompt for. A single Go binary, nothing else to
-install.
+Render project templates — no hooks, no code execution, templates are data.
+A template is a directory of project files plus a `jig.json` manifest
+declaring its variables. One Go binary, no runtime, no plugins, no code
+execution at scaffold time — simple scaffolds, safe and repeatable.
+
+> A jig is a device or template that guides a tool relative to a workpiece
+> to ensure accuracy, safety and repeatability. That is the aim of the jig
+> project template renderer.
 
 > **Source of truth:** jig is developed in a private monorepo and this
 > repository is a published mirror, kept in sync automatically. Please open
@@ -41,6 +45,8 @@ Set `JIG_TEMPLATES_DIR` once and drop `--templates-dir` from every command.
 
 ## Documentation
 
-Full docs live in [`docs/`](docs/index.md): the
-[CLI reference](docs/cli.md), the [`jig.json` manifest](docs/manifest.md),
-and [example layouts](docs/example_layouts.md).
+Full documentation lives at **[jig.cliwright.dev](https://jig.cliwright.dev)**:
+the [CLI reference](https://jig.cliwright.dev/cli/), the [`jig.json`
+manifest](https://jig.cliwright.dev/manifest/), the [template
+implementation](https://jig.cliwright.dev/implementation/), and [example
+layouts](https://jig.cliwright.dev/example_layouts/).

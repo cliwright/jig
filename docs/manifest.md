@@ -7,7 +7,7 @@ Every template carries a manifest at the skeleton root:
 ```
 
 It declares what the template asks for and how it renders. The manifest
-itself never renders into the output — it is the template's own metadata.
+itself never renders into the output as it is the template's own metadata.
 
 ## Example
 
