@@ -88,6 +88,22 @@ jig render --template python/std/lib --output ./libs
 Precedence: `--templates-dir` flag > `JIG_TEMPLATES_DIR` > the current
 directory.
 
+## Getting templates from git
+
+jig never fetches: clone a template repo yourself and point the templates
+root at it. The trust decision stays with you, in your own git setup.
+
+```sh
+git clone https://github.com/example/jig-templates ~/jig-templates
+export JIG_TEMPLATES_DIR="$HOME/jig-templates"
+git -C "$JIG_TEMPLATES_DIR" checkout v1.2.0   # optional: pin a version
+jig render --template python/std/lib --output ./libs
+```
+
+Update later with `git pull`. Repos that don't follow the
+`<language>/<flavor>/<kind>` layout still work — pass a path straight to
+`--template`.
+
 ## How templates are resolved
 
 `--template` accepts three forms:

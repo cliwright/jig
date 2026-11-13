@@ -88,3 +88,5 @@ jig render --template python/std/lib --output ./libs \
   built-in string helpers.
 - [Example layouts](example_layouts.md) — what templates look like in
   practice.
+- [ADRs](adr/index.md) — why jig is the way it is, including rejected
+  ideas.

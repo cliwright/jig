@@ -10,6 +10,7 @@ nav = [
   { "Manifest" = "manifest.md" },
   { "Implementation" = "implementation.md" },
   { "Example Layouts" = "example_layouts.md" },
+  { "ADRs" = "adr/index.md" },
 ]
 
 [project.theme]
