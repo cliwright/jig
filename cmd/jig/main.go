@@ -14,7 +14,7 @@ import (
 // builds from source report "dev".
 var version = "dev"
 
-func main() {
+func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "jig",
 		Short: "Render project templates (no hooks, no template-supplied code execution — templates are data)",
@@ -32,7 +32,11 @@ Agent using jig? Start with: jig agents`,
 		SilenceErrors: true,
 	}
 	root.AddCommand(newRenderCmd(), newNewCmd(), newCheckCmd(), newBumpCmd(), newAgentsCmd(), newDocsCmd())
-	if err := root.Execute(); err != nil {
+	return root
+}
+
+func main() {
+	if err := newRootCmd().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}

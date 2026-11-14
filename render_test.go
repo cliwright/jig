@@ -320,11 +320,35 @@ func TestRenderRefusesSymlinkedProjectDir(t *testing.T) {
 
 func TestRenderRefusesEmptyRenderedName(t *testing.T) {
 	versionDir := writeTemplate(t, map[string]string{
-		"jig.json":        `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}, "suffix": {"default": ""}}}`,
+		"jig.json":    `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}, "suffix": {"default": ""}}}`,
 		"{{.suffix}}": "x\n",
 	})
 	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "suffix": ""}, Options{})
 	if err == nil || !strings.Contains(err.Error(), "empty name") {
 		t.Fatalf("error = %v, want empty-name refusal", err)
+	}
+}
+
+func TestRenderCopiesBinariesVerbatim(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+	})
+	// binary content (NUL byte) containing template-looking bytes: it must
+	// copy through untouched, never parsed
+	bin := append([]byte("{{.PROJECT_NAME}}\x00{{\xde\xad\xbe\xef"), []byte("garbage")...)
+	src := filepath.Join(versionDir, TemplateDirName, "blob.bin")
+	if err := os.WriteFile(src, bin, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(res.OutputDir, "blob.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(bin) {
+		t.Errorf("binary was modified: %q", got)
 	}
 }
