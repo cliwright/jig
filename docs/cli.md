@@ -1,7 +1,8 @@
 # CLI reference
 
-jig has four commands: `render` (use a template), `new` and `bump` (author
-one), and `check` (verify one). `jig --version` prints the version.
+jig has five commands: `render` (use a template), `new` and `bump` (author
+one), `check` (verify one), and `agents` (print the agent guide).
+`jig --version` prints the version.
 
 ## jig render
 
@@ -74,6 +75,18 @@ every file and directory name and every text file's content is parsed and
 rendered against the resolved defaults, and declared-but-unused variables
 print as warnings. Exits non-zero on any error — run it before shipping a
 template, and in CI.
+
+## jig agents
+
+```sh
+jig agents
+```
+
+Prints the agent guide: a stable onboarding text for AI agents driving jig
+— what it is, the trust model, how to run it non-interactively, and
+pointers to `--help` and the documentation. The text is embedded from
+[`agents.txt`](https://github.com/cliwright/jig/blob/main/agents.txt) and
+deliberately documents no flags; discovery happens through `jig --help`.
 
 ## JIG_TEMPLATES_DIR
 

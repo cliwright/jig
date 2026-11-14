@@ -1,0 +1,54 @@
+jig — agent guide
+=================
+
+What jig is
+-----------
+jig renders project templates. A template is a directory of files plus a
+jig.json manifest declaring its variables; rendering walks the tree,
+renders file/dir names and text contents with Go text/template, and copies
+binaries verbatim.
+
+The trust model: templates are inert data. No hooks, no scripts, no code
+execution at render time — ever. Rendered paths are contained to the output
+directory, and symlinks are rejected unless --trust is given. Rendering a
+template you did not write is safe: nothing in it can run.
+
+Running jig non-interactively
+-----------------------------
+You are almost certainly not on a TTY, and prompting requires one. Always
+pass values explicitly:
+
+    jig render --template <name> --output <dir> --var KEY=value [--var ...]
+    jig render --template <name> --output <dir> --vars-file values.json
+
+With --var or --vars-file given, jig renders non-interactively; anything
+not set takes its manifest default (defaults may derive from variables you
+did set).
+
+Typical workflow
+----------------
+    # authoring a template
+    jig new python/std/lib --templates-dir ./templates
+    # ... edit ./templates/python/std/lib/v1/{{.PROJECT_NAME}}/ ...
+    jig check --template python/std/lib --templates-dir ./templates
+    jig bump python/std/lib --templates-dir ./templates   # v1 -> v2
+
+    # using a template
+    jig render --template python/std/lib --templates-dir ./templates \
+        --output ./out --var PROJECT_NAME=widget
+
+Discovering more
+----------------
+This text is deliberately stable; flags and details are not documented
+here on purpose. Run:
+
+    jig --help
+    jig <command> --help
+
+Full documentation: https://jig.cliwright.dev
+  - CLI reference, the jig.json manifest (variables, derived defaults,
+    choices, patterns), template syntax and string helpers, and the ADRs
+    explaining why jig is designed this way (including rejected ideas).
+
+Source code: https://github.com/cliwright/jig (a published mirror of the
+development monorepo; issues and PRs welcome there).

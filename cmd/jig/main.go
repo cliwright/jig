@@ -23,13 +23,15 @@ plus a jig.json manifest declaring the variables they prompt for.
 
 Templates are addressed <language>/<flavor>/<kind> with a mandatory version
 directory (v<N>) and rendered strictly: no hooks, no scripts, no arbitrary
-code execution.`,
+code execution.
+
+Agent using jig? Start with: jig agents`,
 		Version:      version,
 		SilenceUsage: true,
 		// main prints the error itself
 		SilenceErrors: true,
 	}
-	root.AddCommand(newRenderCmd(), newNewCmd(), newCheckCmd(), newBumpCmd())
+	root.AddCommand(newRenderCmd(), newNewCmd(), newCheckCmd(), newBumpCmd(), newAgentsCmd())
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
