@@ -13,15 +13,21 @@ reopens that door.
 
 ## Decision
 
-Never. Templates are inert, vettable data: rendering walks the tree and
-writes files, and nothing in a template can execute. Post-render steps
-(repo wiring, provenance stamps, next-step hints) are the caller's job,
-never jig's and never the template's.
+Never. Templates are inert, vettable data. Precisely: no template-supplied
+programs are executed. Rendering evaluates the standard template language
+and invokes only jig's explicitly registered, reviewed functions — there is
+no mechanism by which a template can run a script, a hook, or a shell
+command. Post-render steps (repo wiring, provenance stamps, next-step
+hints) are the caller's job, never jig's and never the template's.
+
+Note the boundary of the guarantee: it covers rendering. What generated
+files do when someone later executes them (a rendered `Makefile`, a setup
+script) is outside jig's control and outside its claim.
 
 ## Consequences
 
-- A registry-distributed template is never "run this stranger's code" —
-  this is the security model and a marketing line.
+- A registry-distributed template never runs code *at render time* — this
+  is the security model and a marketing line.
 - Anything a hook could do, jig refuses to do. Setup steps belong in the
   rendered project's own tooling, documented in its README, run by a human
   who can see it.

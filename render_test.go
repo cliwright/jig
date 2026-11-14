@@ -156,3 +156,72 @@ func TestRenderTrustRefusesEscapingSymlink(t *testing.T) {
 		t.Fatalf("error = %v, want escape refusal", err)
 	}
 }
+
+func TestRenderRefusesSymlinkedDestDir(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":             validManifest,
+		"config/settings.yaml": "key: value\n",
+	})
+	out := t.TempDir()
+	external := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(out, "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(out, "demo", "config")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "refusing to write through it") {
+		t.Fatalf("error = %v, want symlinked-destination refusal", err)
+	}
+	entries, err := os.ReadDir(external)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("external dir should be untouched, got %v, %v", entries, err)
+	}
+}
+
+func TestRenderRefusesSymlinkedDestFile(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+		"file.txt": "new\n",
+	})
+	out := t.TempDir()
+	target := filepath.Join(t.TempDir(), "target.txt")
+	if err := os.WriteFile(target, []byte("original\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(out, "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(out, "demo", "file.txt")); err != nil {
+		t.Fatal(err)
+	}
+	// refused with and without Force: force overwrites regular files, it
+	// never follows someone's link
+	for _, opts := range []Options{{}, {Force: true}} {
+		_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, opts)
+		if err == nil || !strings.Contains(err.Error(), "refusing to write through it") {
+			t.Fatalf("Force=%v: error = %v, want symlinked-destination refusal", opts.Force, err)
+		}
+	}
+	data, _ := os.ReadFile(target)
+	if string(data) != "original\n" {
+		t.Fatalf("link target was clobbered: %q", data)
+	}
+}
+
+func TestRenderTrustRejectsAbsoluteSymlink(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+		"real.txt": "real\n",
+	})
+	link := filepath.Join(versionDir, TemplateDirName, "link.txt")
+	// absolute target that resolves INSIDE the template tree — still refused
+	if err := os.Symlink(filepath.Join(versionDir, TemplateDirName, "real.txt"), link); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Trust: true})
+	if err == nil || !strings.Contains(err.Error(), "absolute target") {
+		t.Fatalf("error = %v, want absolute-symlink refusal", err)
+	}
+}

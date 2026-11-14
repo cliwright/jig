@@ -22,3 +22,6 @@ the default render policy.
   `--version`, latest by default) stays intact.
 - Bump is a pure file operation: it renders nothing and evaluates no
   manifest.
+- Bump creates a starting point, not a compatibility promise: whether
+  `v<N+1>` is a breaking change for existing values files is the author's
+  call to make and document.

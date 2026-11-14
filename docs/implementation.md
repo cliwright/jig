@@ -8,7 +8,8 @@ names:
 ```
 {{.PROJECT_NAME}}                  a variable
 {{.AUTHOR | upper}}                pipelines
-{{if .WITH_TESTS}}…{{end}}         conditionals
+{{if eq .WITH_TESTS "yes"}}…{{end}} conditionals (values are strings —
+                                   compare explicitly)
 {{range .ITEMS}}…{{end}}           loops
 {{- /* trimmed whitespace */ -}}   comments and trimming
 ```

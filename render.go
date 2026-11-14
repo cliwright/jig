@@ -30,7 +30,7 @@ type Options struct {
 	// Trust allows symlinks in the template: they are recreated as symlinks
 	// in the output. The default rejects them — a registry-distributed
 	// template is data, and links can point anywhere. Even under Trust,
-	// links resolving outside the template tree are refused.
+	// only relative links resolving inside the template tree are allowed.
 	Trust bool
 }
 
@@ -117,6 +117,20 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 	plan, err := planRender(skel, dest, values, used, m.Verbatim, opts.Trust)
 	if err != nil {
 		return nil, err
+	}
+	// Lexical containment is not filesystem containment: a symlink already
+	// sitting in the destination tree would silently redirect writes outside
+	// it. Refuse to write through any symlinked component, Force or not —
+	// Force means "overwrite regular files", never "follow someone's link".
+	for _, path := range append([]string{dest}, plan.dirs...) {
+		if err := checkDestChain(outputDir, path); err != nil {
+			return nil, err
+		}
+	}
+	for _, f := range plan.files {
+		if err := checkDestChain(outputDir, f.dst); err != nil {
+			return nil, err
+		}
 	}
 	if !opts.Force {
 		for _, f := range plan.files {
@@ -236,9 +250,10 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 }
 
 // checkSymlink vets a symlink found in the template. Links are rejected
-// unless trust is set; a trusted link must resolve inside the template tree,
-// so even a trusted template cannot smuggle in a pointer to the host
-// filesystem. Returns the link target to recreate in the output.
+// unless trust is set. A trusted link must be relative and resolve inside
+// the template tree: an absolute link would recreate as a pointer back to
+// the author's machine, and an escaping link would smuggle in a pointer to
+// the host filesystem. Returns the link target to recreate in the output.
 func checkSymlink(skel, path string, trust bool) (string, error) {
 	if !trust {
 		return "", fmt.Errorf("template contains symlink %s: templates must not contain symlinks (use --trust to allow links inside the template tree)", path)
@@ -247,10 +262,10 @@ func checkSymlink(skel, path string, trust bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("reading symlink %s: %w", path, err)
 	}
-	resolved := target
-	if !filepath.IsAbs(resolved) {
-		resolved = filepath.Join(filepath.Dir(path), resolved)
+	if filepath.IsAbs(target) {
+		return "", fmt.Errorf("symlink %s has absolute target %s: only relative links inside the template tree are allowed, even with --trust", path, target)
 	}
+	resolved := filepath.Join(filepath.Dir(path), target)
 	root, err := filepath.Abs(skel)
 	if err != nil {
 		return "", err
@@ -264,6 +279,35 @@ func checkSymlink(skel, path string, trust bool) (string, error) {
 		return "", fmt.Errorf("symlink %s points outside the template tree (%s)", path, target)
 	}
 	return target, nil
+}
+
+// checkDestChain walks the existing components of dst (relative to root,
+// the output directory) with Lstat and refuses if any is a symlink.
+// containedPath keeps rendered paths lexically inside the output directory;
+// this keeps the actual filesystem writes inside it. Checking stops at the
+// first component that does not exist — everything below it will be created
+// by the render itself. A symlink as root itself is the caller's explicit
+// choice and allowed.
+func checkDestChain(root, dst string) error {
+	rel, err := filepath.Rel(root, dst)
+	if err != nil {
+		return err
+	}
+	cur := root
+	for _, seg := range strings.Split(rel, string(filepath.Separator)) {
+		cur = filepath.Join(cur, seg)
+		info, err := os.Lstat(cur)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("checking %s: %w", cur, err)
+		}
+		if info.Mode()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("destination %s contains symlink %s: refusing to write through it", dst, cur)
+		}
+	}
+	return nil
 }
 
 // containedPath joins base and a rendered name, refusing results that escape

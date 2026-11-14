@@ -8,10 +8,12 @@ jig.json manifest declaring its variables; rendering walks the tree,
 renders file/dir names and text contents with Go text/template, and copies
 binaries verbatim.
 
-The trust model: templates are inert data. No hooks, no scripts, no code
-execution at render time — ever. Rendered paths are contained to the output
-directory, and symlinks are rejected unless --trust is given. Rendering a
-template you did not write is safe: nothing in it can run.
+The trust model: templates are inert data. No template-supplied program
+ever runs at render time — rendering evaluates only the standard template
+language and jig's registered, reviewed functions; a template cannot
+execute a script, hook, or shell command. Rendered paths are contained to
+the output directory, and symlinks are rejected unless --trust is given.
+Rendering a template you did not write is safe at render time.
 
 Running jig non-interactively
 -----------------------------

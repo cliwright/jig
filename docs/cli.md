@@ -22,7 +22,7 @@ interactively for each variable the template's manifest declares.
 | `--vars-file` | — | JSON object of variable values; renders non-interactively |
 | `--var key=value` | — | Set one variable; repeatable |
 | `--force` | refuse | Overwrite existing files on collision |
-| `--trust` | reject | Allow symlinks in the template; recreated as links in the output, but only if they resolve inside the template tree |
+| `--trust` | reject | Allow symlinks in the template; recreated as links in the output, but only relative links that resolve inside the template tree |
 
 Variable precedence: manifest defaults < `--vars-file` < `--var` <
 interactive answers. An override re-derives any default built on it, so
@@ -60,9 +60,12 @@ need a new version.
 jig bump <language>/<flavor>/<kind> [--templates-dir <dir>]
 ```
 
-Copies the template's latest version directory to `v<N+1>` as the starting
-point for its next iteration. Old versions stay put; renders pin theirs
-with `--version`. Refuses symlinks, matching the default render policy.
+Publishes a new version of a template: copies the latest version directory
+to `v<N+1>` as the starting point for its next iteration. Old versions stay
+put and stay renderable — `jig render --version N` pins one, so publishing
+`v2` never silently changes what existing users render. Bump is a starting
+point, not a compatibility promise; document breaking changes in the new
+version's README. Refuses symlinks, matching the default render policy.
 
 ## jig check
 

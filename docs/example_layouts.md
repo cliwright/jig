@@ -53,8 +53,9 @@ templates/go/std/tool/
 ```
 
 Two versions side by side: `jig render` picks `v2` (the latest) by default,
-`--version 1` renders the older shape. Bump the version directory when the
-layout changes in a way existing users shouldn't silently inherit.
+`--version 1` renders the older shape. `jig bump go/std/tool` copies the
+latest version to `v3` when the layout changes in a way existing users
+shouldn't silently inherit — old versions stay renderable.
 
 ## No convention at all
 

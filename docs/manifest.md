@@ -55,6 +55,30 @@ checked against its pattern or choices at render time — including defaults,
 so keep the two consistent. For `choices`, a static default must be one of
 the listed values.
 
+## Value types
+
+There is exactly one type: **string**. Every variable's value — default,
+`--vars-file` entry, `--var` flag, interactive answer — is a string, and
+the manifest schema enforces it (`default` must be a string; a vars-file
+must be a JSON object of string values). `pattern` and `choices` validate
+strings.
+
+This matters for conditionals. In Go templates a non-empty string is
+truthy, so `{{if .WITH_TESTS}}` is true even when `WITH_TESTS` is the
+string `"false"`. The idiomatic patterns:
+
+- **Boolean-ish switches:** compare explicitly —
+  `{{if eq .WITH_TESTS "yes"}}…{{end}}` — and declare the variable with
+  `choices: ["yes", "no"]` so the prompt offers both.
+- **Presence switches:** treat empty as off —
+  `{{if .EXTRA}}…{{end}}` with `default: ""` — though note `default` is
+  required and empty string is a valid one.
+- **Numbers:** arrive as strings; compare with `eq` against string
+  literals. There is no arithmetic in the func map by design.
+
+Richer types (real booleans, numbers, lists) are a deliberate omission,
+not an oversight; adding them would be a new ADR, not a quiet feature.
+
 ## Derived defaults
 
 A default may reference other variables with the full template syntax:
@@ -89,7 +113,9 @@ answering `PROJECT_NAME` differently also fixes `PKG`.
   render to `../…` or empty names fail the render no matter what the
   manifest allows.
 - **Symlinks are rejected** by default; `jig render --trust` recreates them
-  in the output, but only if they resolve inside the template tree.
+  in the output, but only relative links that resolve inside the template
+  tree. Symlinks already sitting in the destination are never followed,
+  `--force` notwithstanding.
 - The whole render is planned before anything is written: a collision or a
   bad template fails without leaving a half-rendered tree.
 - `jig check` dry-renders all of this without writing — run it before

@@ -4,10 +4,11 @@
   </a>
 </p>
 
-Render project templates — no hooks, no code execution, templates are data.
+Render project templates — no hooks, no template-supplied code execution,
+templates are data.
 A template is a directory of project files plus a `jig.json` manifest
 declaring its variables. One Go binary, no runtime, no plugins, no code
-execution at scaffold time — simple scaffolds, safe and repeatable.
+execution at render time — simple scaffolds, safe and repeatable.
 
 > A jig is a device or template that guides a tool relative to a workpiece
 > to ensure accuracy, safety and repeatability. That is the aim of the jig
@@ -42,6 +43,16 @@ jig render --template python/std/lib --templates-dir ./templates --output ./libs
 ```
 
 Set `JIG_TEMPLATES_DIR` once and drop `--templates-dir` from every command.
+
+## For agents
+
+jig ships first-class support for AI agents driving it:
+
+```sh
+jig agents    # onboarding: what jig is, trust model, non-interactive usage
+jig docs      # list the documentation embedded in this binary
+jig docs cli  # print one page — always matching the installed version
+```
 
 ## Documentation
 

@@ -8,8 +8,8 @@
 
 `jig` is a project scaffolding tool. A template is a directory of project
 files plus a `jig.json` manifest declaring its variables. One Go binary, no
-runtime, no plugins, no code execution at scaffold time — simple scaffolds,
-safe and repeatable.
+runtime, no plugins, no template-supplied code execution — simple
+scaffolds, safe and repeatable.
 
 ## Why "jig"?
 
@@ -25,14 +25,17 @@ baked into the template expose you to potential security risks.
 
 `jig` does the opposite:
 
-**rendering never executes anything.** A template is WYSIWYG: file names and
-file contents, with variables only where you need them.
+**no template-supplied program ever runs.** Rendering evaluates only the
+standard Go template language and jig's own registered, reviewed string
+functions — a template cannot execute a script, a hook, or a shell command.
+A template is WYSIWYG: file names and file contents, with variables only
+where you need them.
 
 This buys you:
 
 - **Auditability.** You can read a template top to bottom and know exactly
-  what lands on disk. Fetching and rendering a template you didn't write is
-  safe, because there is nothing in it that *can* run.
+  what lands on disk. Rendering a template you didn't write is safe at
+  render time, because there is no mechanism in it that *can* run code.
 
 - **Diffability.** A template change is a plain text diff. Reviewing one is
   reviewing the scaffold itself.
@@ -42,7 +45,10 @@ This buys you:
 
 The trade-off is deliberate: anything a hook could do, jig refuses to do. If
 a project needs a setup step, that step belongs in the project's own
-tooling — documented in its README, run by a human who can see it.
+tooling — documented in its README, run by a human who can see it. (The
+guarantee covers rendering; what a rendered `Makefile` or setup script does
+when *you* run it afterwards is yours to read first — see
+[ADR 3](adr/0003-no-hooks.md).)
 
 ## Install
 
@@ -66,9 +72,11 @@ jig new python/std/lib --templates-dir ./templates
 
 This creates `templates/python/std/lib/v1/{{.PROJECT_NAME}}/` with a starter
 `jig.json` and README. Edit the skeleton — any file or directory name may
-contain `{{.PROJECT_NAME}}` or another declared variable — then render:
+contain `{{.PROJECT_NAME}}` or another declared variable — then validate
+and render:
 
 ```sh
+jig check --template python/std/lib --templates-dir ./templates
 jig render --template python/std/lib --templates-dir ./templates --output ./libs
 ```
 
@@ -78,6 +86,25 @@ jig prompts for each variable the manifest declares. For scripts and CI:
 jig render --template python/std/lib --output ./libs \
   --vars-file values.json --var PROJECT_NAME=widget
 ```
+
+When the template later changes in a way existing users shouldn't silently
+inherit, `jig bump python/std/lib` copies `v1` to `v2` as the starting
+point for the new version — old versions stay renderable with
+`--version 1`.
+
+## Agent support
+
+jig is built to be driven by AI agents, not just humans:
+
+- `jig agents` prints a stable onboarding text: what jig is, the trust
+  model, how to render non-interactively, and where to look next. The root
+  `--help` points agents at it.
+- `jig docs` serves the documentation **embedded in the binary** — always
+  exactly matching the version being run, available offline, as raw
+  markdown on stdout. `jig docs` lists pages, `jig docs <page>` prints one.
+
+Both are library functions too (`jig.AgentGuide`, `jig.Doc`), so tools
+embedding jig — like smith — can surface the same text.
 
 ## Read next
 

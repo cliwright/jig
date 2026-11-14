@@ -23,3 +23,7 @@ warnings. Exit non-zero on any error.
 - Authors run it before shipping; CI can gate template repos on it.
 - Checking and rendering share the walk and the content renderer, so check
   results predict render results — no second code path to drift.
+- The limits, honestly: check renders against the resolved *defaults*, so
+  it cannot guarantee every user-supplied value combination renders
+  cleanly; and it validates the template, not a future destination —
+  writability and collisions are render-time concerns.

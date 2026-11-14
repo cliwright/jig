@@ -32,9 +32,9 @@ direct path to a template version directory. Interactive prompting runs
 unless --vars-file is given; --var key=value overrides individual
 variables. Precedence: defaults < vars-file < --var < interactive answers.
 
-Rendering never executes code and never overwrites existing files unless
---force is given; rendering into a populated directory is fine as long as
-no file collides.`,
+Rendering never runs template-supplied programs and never overwrites
+existing files unless --force is given; rendering into a populated
+directory is fine as long as no file collides.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if templateArg == "" {

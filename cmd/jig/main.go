@@ -17,7 +17,7 @@ var version = "dev"
 func main() {
 	root := &cobra.Command{
 		Use:   "jig",
-		Short: "Render project templates (no hooks, no code execution — templates are data)",
+		Short: "Render project templates (no hooks, no template-supplied code execution — templates are data)",
 		Long: `jig renders project templates: directories of Go text/template files
 plus a jig.json manifest declaring the variables they prompt for.
 
