@@ -31,7 +31,7 @@ Agent using jig? Start with: jig agents`,
 		// main prints the error itself
 		SilenceErrors: true,
 	}
-	root.AddCommand(newRenderCmd(), newNewCmd(), newCheckCmd(), newBumpCmd(), newAgentsCmd())
+	root.AddCommand(newRenderCmd(), newNewCmd(), newCheckCmd(), newBumpCmd(), newAgentsCmd(), newDocsCmd())
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)

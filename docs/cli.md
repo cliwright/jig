@@ -1,7 +1,7 @@
 # CLI reference
 
-jig has five commands: `render` (use a template), `new` and `bump` (author
-one), `check` (verify one), and `agents` (print the agent guide).
+jig has six commands: `render` (use a template), `new` and `bump` (author
+one), `check` (verify one), `agents` and `docs` (agent-facing help).
 `jig --version` prints the version.
 
 ## jig render
@@ -87,6 +87,19 @@ Prints the agent guide: a stable onboarding text for AI agents driving jig
 pointers to `--help` and the documentation. The text is embedded from
 [`agents.txt`](https://github.com/cliwright/jig/blob/main/agents.txt) and
 deliberately documents no flags; discovery happens through `jig --help`.
+
+## jig docs
+
+```sh
+jig docs            # list available pages
+jig docs <page>     # print one as raw markdown
+```
+
+Prints the documentation embedded in the binary — the same operational
+pages as jig.cliwright.dev (CLI, manifest, implementation, layouts), but
+always exactly matching the version you're running. Raw markdown on
+stdout, no pager: built for agents (and for `grep`). The ADRs are web-only
+— design rationale for humans, on the docs site.
 
 ## JIG_TEMPLATES_DIR
 

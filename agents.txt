@@ -45,10 +45,17 @@ here on purpose. Run:
     jig --help
     jig <command> --help
 
-Full documentation: https://jig.cliwright.dev
+The full documentation is embedded in this binary — always the right
+docs for the version you are running:
+
+    jig docs              list the available pages
+    jig docs <page>       print one as markdown (e.g. jig docs manifest)
+
+Full documentation (web): https://jig.cliwright.dev
   - CLI reference, the jig.json manifest (variables, derived defaults,
     choices, patterns), template syntax and string helpers, and the ADRs
     explaining why jig is designed this way (including rejected ideas).
+    The ADRs are web-only; jig docs serves the operational pages.
 
 Source code: https://github.com/cliwright/jig (a published mirror of the
 development monorepo; issues and PRs welcome there).
