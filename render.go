@@ -240,6 +240,11 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 			plan.files = append(plan.files, plannedFile{src: path, dst: out, entry: d, linkTarget: linkTarget})
 			return nil
 		}
+		if !d.Type().IsRegular() {
+			// FIFOs, devices, sockets: copying one would read from a special
+			// file — a FIFO read blocks forever. Templates are data.
+			return fmt.Errorf("template contains non-regular file %s: only directories and regular files are allowed", rel)
+		}
 		plan.files = append(plan.files, plannedFile{src: path, dst: out, entry: d, verbatim: isVerbatim(relSlash, verbatim)})
 		return nil
 	})

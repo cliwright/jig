@@ -53,6 +53,9 @@ func copyTree(src, dst string) error {
 		if d.IsDir() {
 			return os.MkdirAll(out, 0o755)
 		}
+		if !d.Type().IsRegular() {
+			return fmt.Errorf("template contains non-regular file %s: bump copies only directories and regular files", path)
+		}
 		return copyFile(path, out, d)
 	})
 }

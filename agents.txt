@@ -12,8 +12,10 @@ The trust model: templates are inert data. No template-supplied program
 ever runs at render time — rendering evaluates only the standard template
 language and jig's registered, reviewed functions; a template cannot
 execute a script, hook, or shell command. Rendered paths are contained to
-the output directory, and symlinks are rejected unless --trust is given.
-Rendering a template you did not write is safe at render time.
+the output directory, symlinks are rejected unless --trust is given, and
+special files (FIFOs, devices, sockets) are rejected outright — this
+includes verbatim directories. Rendering a template you did not write is
+safe at render time.
 
 Running jig non-interactively
 -----------------------------

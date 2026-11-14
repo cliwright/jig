@@ -32,3 +32,8 @@ in the destination are a separate, stricter matter covered by
 - Template authors who legitimately want links get them with one flag, and
   still can't (accidentally) ship an escaping or machine-specific link.
 - smith, as a library caller, renders with the default: reject.
+- The same vetting rejects other special files (FIFOs, devices, sockets):
+  only directories and regular files may live in a template — copying a
+  FIFO would read from it and block the render. This applies inside
+  verbatim directories too; verbatim changes *copying* semantics
+  (unrendered), never *vetting*.

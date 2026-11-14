@@ -116,6 +116,9 @@ answering `PROJECT_NAME` differently also fixes `PKG`.
   in the output, but only relative links that resolve inside the template
   tree. Symlinks already sitting in the destination are never followed,
   `--force` notwithstanding.
+- **Only directories and regular files** may live in a template — FIFOs,
+  devices, and sockets are rejected (copying one would read from a special
+  file).
 - The whole render is planned before anything is written: a collision or a
   bad template fails without leaving a half-rendered tree.
 - `jig check` dry-renders all of this without writing — run it before

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -223,5 +224,107 @@ func TestRenderTrustRejectsAbsoluteSymlink(t *testing.T) {
 	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Trust: true})
 	if err == nil || !strings.Contains(err.Error(), "absolute target") {
 		t.Fatalf("error = %v, want absolute-symlink refusal", err)
+	}
+}
+
+func TestRenderRejectsNonRegularFiles(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+	})
+	if err := syscall.Mkfifo(filepath.Join(versionDir, TemplateDirName, "fifo"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "non-regular file") {
+		t.Fatalf("error = %v, want non-regular-file refusal", err)
+	}
+	// check catches it too, without hanging
+	if _, err := Check(versionDir); err == nil || !strings.Contains(err.Error(), "non-regular file") {
+		t.Fatalf("Check error = %v, want non-regular-file refusal", err)
+	}
+}
+
+const verbatimManifest = `{
+  "version": 1,
+  "variables": {"PROJECT_NAME": {"default": "demo"}},
+  "verbatim": ["template"]
+}`
+
+func TestRenderVerbatim(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":                            verbatimManifest,
+		"{{.PROJECT_NAME}}/outer.txt":         "rendered {{.PROJECT_NAME}}\n",
+		"template/{{.PROJECT_NAME}}/jig.json": `{"inner": "{{.PROJECT_NAME}}"}`,
+	})
+	out := t.TempDir()
+	res, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	// outside the verbatim dir: names and contents render
+	data, err := os.ReadFile(filepath.Join(res.OutputDir, "demo", "outer.txt"))
+	if err != nil || string(data) != "rendered demo\n" {
+		t.Errorf("outer.txt = %q, %v", data, err)
+	}
+	// inside the verbatim dir: names and contents ship as authored
+	inner := filepath.Join(res.OutputDir, "template", "{{.PROJECT_NAME}}", "jig.json")
+	data, err = os.ReadFile(inner)
+	if err != nil {
+		t.Fatalf("inner file not at its unrendered path: %v", err)
+	}
+	if string(data) != `{"inner": "{{.PROJECT_NAME}}"}` {
+		t.Errorf("inner content was rendered: %q", data)
+	}
+}
+
+func TestRenderVerbatimDirStillVetted(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":          verbatimManifest,
+		"template/real.txt": "x\n",
+	})
+	link := filepath.Join(versionDir, TemplateDirName, "template", "link.txt")
+	if err := os.Symlink("real.txt", link); err != nil {
+		t.Fatal(err)
+	}
+	// verbatim changes copying, never vetting
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "must not contain symlinks") {
+		t.Fatalf("error = %v, want symlink refusal inside verbatim dir", err)
+	}
+	// with trust, a relative in-tree link inside a verbatim dir is fine
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo"}, Options{Trust: true})
+	if err != nil {
+		t.Fatalf("trusted render: %v", err)
+	}
+	target, err := os.Readlink(filepath.Join(res.OutputDir, "template", "link.txt"))
+	if err != nil || target != "real.txt" {
+		t.Errorf("link = %q, %v", target, err)
+	}
+}
+
+func TestRenderRefusesSymlinkedProjectDir(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+		"file.txt": "x\n",
+	})
+	out := t.TempDir()
+	external := t.TempDir()
+	if err := os.Symlink(external, filepath.Join(out, "demo")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "refusing to write through it") {
+		t.Fatalf("error = %v, want symlinked-project-dir refusal", err)
+	}
+}
+
+func TestRenderRefusesEmptyRenderedName(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":        `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}, "suffix": {"default": ""}}}`,
+		"{{.suffix}}": "x\n",
+	})
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "suffix": ""}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "empty name") {
+		t.Fatalf("error = %v, want empty-name refusal", err)
 	}
 }

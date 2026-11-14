@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -54,5 +55,19 @@ func TestBumpRefusesSymlinks(t *testing.T) {
 	}
 	if _, err := Bump(templatesDir, "x/y/z"); err == nil || !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("error = %v, want symlink refusal", err)
+	}
+}
+
+func TestBumpRefusesNonRegularFiles(t *testing.T) {
+	templatesDir := t.TempDir()
+	skel := filepath.Join(templatesDir, "x", "y", "z", "v1", TemplateDirName)
+	if err := os.MkdirAll(skel, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(skel, "fifo"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Bump(templatesDir, "x/y/z"); err == nil || !strings.Contains(err.Error(), "non-regular file") {
+		t.Fatalf("error = %v, want non-regular-file refusal", err)
 	}
 }

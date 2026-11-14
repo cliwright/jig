@@ -8,7 +8,7 @@
 
 `jig` is a project scaffolding tool. A template is a directory of project
 files plus a `jig.json` manifest declaring its variables. One Go binary, no
-runtime, no plugins, no template-supplied code execution — simple
+runtime, no plugins, no template-supplied code execution, simple
 scaffolds, safe and repeatable.
 
 ## Why "jig"?
@@ -28,8 +28,7 @@ baked into the template expose you to potential security risks.
 **no template-supplied program ever runs.** Rendering evaluates only the
 standard Go template language and jig's own registered, reviewed string
 functions — a template cannot execute a script, a hook, or a shell command.
-A template is WYSIWYG: file names and file contents, with variables only
-where you need them.
+A template is an ordinary directory tree with explicit variable and predictable rendering rules..
 
 This buys you:
 
@@ -71,9 +70,9 @@ jig new python/std/lib --templates-dir ./templates
 ```
 
 This creates `templates/python/std/lib/v1/{{.PROJECT_NAME}}/` with a starter
-`jig.json` and README. Edit the skeleton — any file or directory name may
-contain `{{.PROJECT_NAME}}` or another declared variable — then validate
-and render:
+`jig.json` and README. Edit the skeleton. Any file or directory name may
+contain `{{.PROJECT_NAME}}` or another declared variable. Once you are finished authoring 
+the template, validate and render:
 
 ```sh
 jig check --template python/std/lib --templates-dir ./templates
