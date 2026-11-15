@@ -10,11 +10,12 @@ names:
 {{.AUTHOR | upper}}                pipelines
 {{if eq .WITH_TESTS "yes"}}…{{end}} conditionals (values are strings —
                                    compare explicitly)
-{{range .ITEMS}}…{{end}}           loops
 {{- /* trimmed whitespace */ -}}   comments and trimming
 ```
 
-The built-in functions (`printf`, `len`, `and`, …) are available too.
+Values are strings, so `range` has nothing to iterate — loops are not
+supported today. The built-in functions (`printf`, `len`, `and`, …) are
+available too.
 
 Rendering is strict: referencing a variable the manifest does not declare
 fails the render. The manifest is the whole contract — see

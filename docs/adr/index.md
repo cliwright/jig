@@ -20,6 +20,7 @@ one, never an edit.
 - [12. `jig bump` version-copy command](0012-jig-bump.md)
 - [13. Prompting requires a TTY](0013-prompting-requires-tty.md)
 - [14. Overwrite refusal is per file, not per directory](0014-per-file-overwrite.md)
+- [16. Prepare everything before writing anything](0016-prepare-then-write.md)
 
 ## Rejected
 

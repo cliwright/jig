@@ -29,6 +29,44 @@ Two variables at work: `PROJECT_NAME` names the rendered project directory,
 difference — project names carry hyphens, package names can't, so they are
 separate variables with separate patterns in the manifest.
 
+The manifest in full — with `PYTHON_PACKAGE` derived from the project name
+by default, so most renders answer one prompt:
+
+```json
+{
+  "version": 1,
+  "variables": {
+    "PROJECT_NAME": {
+      "default": "my-tool",
+      "prompt": "Project name",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "PYTHON_PACKAGE": {
+      "default": "{{ .PROJECT_NAME | replace \"-\" \"_\" }}",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    }
+  }
+}
+```
+
+Rendering it with `--var PROJECT_NAME=cool-cli` produces:
+
+```
+cool-cli/
+├── README.md
+├── pyproject.toml
+├── src/
+│   └── cool_cli/
+│       ├── __init__.py
+│       ├── __main__.py
+│       └── cli.py
+└── tests/
+    ├── conftest.py
+    └── test_cool_cli.py
+```
+
+`PYTHON_PACKAGE` re-derived from the override; no second answer needed.
+
 ## A Go tool
 
 ```

@@ -119,8 +119,11 @@ answering `PROJECT_NAME` differently also fixes `PKG`.
 - **Only directories and regular files** may live in a template — FIFOs,
   devices, and sockets are rejected (copying one would read from a special
   file).
-- The whole render is planned before anything is written: a collision or a
-  bad template fails without leaving a half-rendered tree.
+- The whole render is **prepared in memory before anything is written**:
+  names, contents, internal collisions (two entries rendering to the same
+  destination), containment, symlinks. A bad template fails without
+  touching the output directory. Distinct directories may merge into one
+  rendered directory; conflicting files inside it are still caught.
 - `jig check` dry-renders all of this without writing — run it before
   shipping a template.
 
@@ -136,5 +139,7 @@ the outer render consuming the inner one's `{{…}}` placeholders.
 { "verbatim": ["template"] }
 ```
 
-Entries must be relative slash paths inside the skeleton (`template`,
-`ci/shared`), never absolute or escaping.
+Entries must be directory **base names** (`template`, not `ci/shared`): a
+verbatim entry matches any directory with that base name, wherever it sits
+in the skeleton. To shield only one specific subtree, give its directory a
+distinctive name.

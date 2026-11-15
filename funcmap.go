@@ -6,10 +6,12 @@ import (
 	"text/template"
 )
 
-// FuncMap is the hand-rolled set of string helpers available to templates.
+// funcMap is the hand-rolled set of string helpers available to templates.
 // Deliberately tiny — no third-party template function libraries; templates
-// stay as simple as possible.
-var FuncMap = template.FuncMap{
+// stay as simple as possible. Unexported: the execution environment is part
+// of jig's contract, so library consumers must not be able to extend it
+// (see docs/adr/0002-text-template-only.md).
+var funcMap = template.FuncMap{
 	"lower":   strings.ToLower,
 	"upper":   strings.ToUpper,
 	"replace": replace,

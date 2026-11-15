@@ -25,9 +25,11 @@ pass values explicitly:
     jig render --template <name> --output <dir> --var KEY=value [--var ...]
     jig render --template <name> --output <dir> --vars-file values.json
 
-With --var or --vars-file given, jig renders non-interactively; anything
-not set takes its manifest default (defaults may derive from variables you
-did set).
+--vars-file always renders non-interactively. --var renders
+non-interactively when stdin is not a terminal (yours is not); on a TTY,
+--var only pre-sets values and prompting still runs, with interactive
+answers winning. Anything not set takes its manifest default (defaults may
+derive from variables you did set).
 
 Typical workflow
 ----------------

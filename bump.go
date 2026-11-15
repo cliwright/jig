@@ -56,6 +56,14 @@ func copyTree(src, dst string) error {
 		if !d.Type().IsRegular() {
 			return fmt.Errorf("template contains non-regular file %s: bump copies only directories and regular files", path)
 		}
-		return copyFile(path, out, d)
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return writeFile(out, data, info.Mode().Perm())
 	})
 }

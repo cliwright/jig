@@ -99,8 +99,8 @@ func LoadManifest(path string) (*Manifest, error) {
 		m.patterns[name] = re
 	}
 	for _, v := range m.Verbatim {
-		if !fs.ValidPath(v) || v == "." {
-			return nil, fmt.Errorf("%s: verbatim path %q must be a relative slash path inside the template", path, v)
+		if strings.Contains(v, "/") || !fs.ValidPath(v) || v == "." {
+			return nil, fmt.Errorf("%s: verbatim entry %q must be a directory base name (e.g. \"template\"), not a path", path, v)
 		}
 	}
 	if err := m.parseDefaults(); err != nil {
@@ -120,7 +120,7 @@ func (m *Manifest) parseDefaults() error {
 	dependents := map[string][]string{}
 	indegree := map[string]int{}
 	for _, name := range m.Names() {
-		t, err := template.New("default:" + name).Funcs(FuncMap).Option("missingkey=error").Parse(m.Variables[name].Default)
+		t, err := template.New("default:" + name).Funcs(funcMap).Option("missingkey=error").Parse(m.Variables[name].Default)
 		if err != nil {
 			return fmt.Errorf("variable %s: invalid default: %w", name, err)
 		}

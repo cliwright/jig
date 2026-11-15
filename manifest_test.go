@@ -237,3 +237,11 @@ func TestChoicesRejected(t *testing.T) {
 		})
 	}
 }
+
+func TestVerbatimEntriesMustBeBaseNames(t *testing.T) {
+	content := `{"version": 1, "variables": {"PROJECT_NAME": {"default": "d"}}, "verbatim": ["ci/shared"]}`
+	_, err := LoadManifest(writeManifest(t, content))
+	if err == nil || !strings.Contains(err.Error(), "base name") {
+		t.Fatalf("error = %v, want base-name refusal", err)
+	}
+}

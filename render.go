@@ -90,10 +90,13 @@ func ResolveTemplate(templatesDir, name string, version int) (string, error) {
 // Manifest.Validate): rendering is hard-fail on undeclared variables
 // (missingkey=error) and on pattern mismatches.
 //
-// Rendering plans the whole tree first and refuses to overwrite any
-// existing file (unless Force), so a failed render never half-writes and a
-// render into a populated directory — e.g. another version of a type tree —
-// is fine as long as no file collides.
+// Rendering is fully prepared before anything is written: every name and
+// every file's content is rendered in memory, destinations are checked for
+// internal collisions, containment, symlinked components, and (unless
+// Force) existing files. Only when all of that passes does the write phase
+// create directories and files — a template error never leaves a partial
+// tree. (Disk failures mid-write and concurrent filesystem changes remain
+// outside the guarantee.)
 func Render(versionDir, outputDir string, values map[string]string, opts Options) (*Result, error) {
 	skel := filepath.Join(versionDir, TemplateDirName)
 	m, err := LoadManifest(filepath.Join(skel, ManifestFileName))
@@ -157,43 +160,48 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 			}
 			continue
 		}
-		if f.verbatim {
-			if err := copyFile(f.src, f.dst, f.entry); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if err := renderFile(f.src, f.dst, values, used, f.entry); err != nil {
+		if err := writeFile(f.dst, f.data, f.mode); err != nil {
 			return nil, err
 		}
 	}
 	return &Result{OutputDir: dest, Unused: m.Unused(used)}, nil
 }
 
-// renderPlan is the walked, name-rendered tree: directories to create and
-// files to render, in walk order.
+// renderPlan is the fully prepared render: directories to create and files
+// to write, contents already rendered in memory, in walk order.
 type renderPlan struct {
 	dirs  []string
 	files []plannedFile
 }
 
 type plannedFile struct {
-	src, dst   string
-	entry      fs.DirEntry
-	verbatim   bool
+	dst        string
+	data       []byte
+	mode       fs.FileMode
 	linkTarget string // non-empty: recreate as a symlink with this target
 }
 
-// planRender walks skel and renders every relative name, returning the work
-// without touching the filesystem. Entries beneath a manifest-declared
-// verbatim directory keep their own names unrendered, while their ancestor
+// planRender walks skel and prepares everything the write phase needs
+// without touching the destination filesystem: names are rendered, file
+// contents are rendered (or read, for verbatim and binary files), and
+// planned destinations are checked against each other — two sources
+// rendering to the same file, or a file and directory sharing a path, fail
+// here rather than overwriting each other mid-write. Distinct directories
+// may merge into one rendered directory; conflicting files inside it are
+// still caught. Entries beneath a manifest-declared verbatim directory
+// keep their own names and contents unrendered, while their ancestor
 // directories render normally. WalkDir visits parents before children, so
-// each entry's output path is its parent's rendered path plus its own name.
-// Symlinks are rejected unless trust is set; trusted links must resolve
-// inside the template tree and are recreated as links in the output.
+// each entry's output path is its parent's rendered path plus its own
+// name. Symlinks are rejected unless trust is set; trusted links must
+// resolve inside the template tree and are recreated as links in the
+// output.
 func planRender(skel, dest string, values map[string]string, used map[string]bool, verbatim []string, trust bool) (*renderPlan, error) {
 	plan := &renderPlan{}
 	renderedDirs := map[string]string{"": dest, ".": dest}
+	type dstKind struct {
+		kind, rel string
+	}
+	planned := map[string]dstKind{}
 	err := filepath.WalkDir(skel, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -228,16 +236,24 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 			return fmt.Errorf("rendering %s name %s: %w", kind, rel, err)
 		}
 		if d.IsDir() {
+			if prev, ok := planned[out]; ok && prev.kind != "directory" {
+				return fmt.Errorf("collision: file %s and directory %s both render to %s", prev.rel, rel, out)
+			}
+			planned[out] = dstKind{kind: "directory", rel: rel}
 			renderedDirs[relSlash] = out
 			plan.dirs = append(plan.dirs, out)
 			return nil
 		}
+		if prev, ok := planned[out]; ok {
+			return fmt.Errorf("collision: %s %s and %s %s both render to %s", prev.kind, prev.rel, kind, rel, out)
+		}
+		planned[out] = dstKind{kind: kind, rel: rel}
 		if d.Type()&fs.ModeSymlink != 0 {
 			linkTarget, err := checkSymlink(skel, path, trust)
 			if err != nil {
 				return err
 			}
-			plan.files = append(plan.files, plannedFile{src: path, dst: out, entry: d, linkTarget: linkTarget})
+			plan.files = append(plan.files, plannedFile{dst: out, linkTarget: linkTarget})
 			return nil
 		}
 		if !d.Type().IsRegular() {
@@ -245,7 +261,19 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 			// file — a FIFO read blocks forever. Templates are data.
 			return fmt.Errorf("template contains non-regular file %s: only directories and regular files are allowed", rel)
 		}
-		plan.files = append(plan.files, plannedFile{src: path, dst: out, entry: d, verbatim: isVerbatim(relSlash, verbatim)})
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		var data []byte
+		if isVerbatim(relSlash, verbatim) {
+			if data, err = os.ReadFile(path); err != nil {
+				return err
+			}
+		} else if data, err = renderContent(path, values, used); err != nil {
+			return err
+		}
+		plan.files = append(plan.files, plannedFile{dst: out, data: data, mode: info.Mode().Perm()})
 		return nil
 	})
 	if err != nil {
@@ -348,20 +376,18 @@ func isVerbatim(rel string, verbatim []string) bool {
 	return false
 }
 
-// copyFile writes src to dst unchanged, preserving the source's mode bits.
-func copyFile(src, dst string, d fs.DirEntry) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	info, err := d.Info()
-	if err != nil {
-		return err
-	}
+// writeFile writes one prepared file with exactly the template's mode
+// bits: WriteFile's perm only applies at creation and is masked by umask,
+// so the Chmod makes the mode exact — templates can ship executables, and
+// --force restores the template's mode rather than keeping the old file's.
+func writeFile(dst string, data []byte, mode fs.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, info.Mode().Perm())
+	if err := os.WriteFile(dst, data, mode); err != nil {
+		return err
+	}
+	return os.Chmod(dst, mode)
 }
 
 // renderString renders one name or path fragment as a template. The
@@ -369,7 +395,7 @@ func copyFile(src, dst string, d fs.DirEntry) error {
 // is a hard error, matching smith's type rendering discipline. Referenced
 // variable names are recorded in used.
 func renderString(s string, values map[string]string, used map[string]bool) (string, error) {
-	t, err := template.New("name").Funcs(FuncMap).Option("missingkey=error").Parse(s)
+	t, err := template.New("name").Funcs(funcMap).Option("missingkey=error").Parse(s)
 	if err != nil {
 		return "", err
 	}
@@ -392,7 +418,7 @@ func renderContent(src string, values map[string]string, used map[string]bool) (
 	if isBinary(data) {
 		return data, nil
 	}
-	t, err := template.New(filepath.Base(src)).Funcs(FuncMap).Option("missingkey=error").Parse(string(data))
+	t, err := template.New(filepath.Base(src)).Funcs(funcMap).Option("missingkey=error").Parse(string(data))
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", src, err)
 	}
@@ -402,23 +428,6 @@ func renderContent(src string, values map[string]string, used map[string]bool) (
 		return nil, fmt.Errorf("rendering %s: %w", src, err)
 	}
 	return buf.Bytes(), nil
-}
-
-// renderFile writes one rendered file. The source file's mode bits are
-// preserved so templates can ship executables.
-func renderFile(src, dst string, values map[string]string, used map[string]bool, d fs.DirEntry) error {
-	data, err := renderContent(src, values, used)
-	if err != nil {
-		return err
-	}
-	info, err := d.Info()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, info.Mode().Perm())
 }
 
 // isBinary reports whether the content looks binary: a NUL byte in the

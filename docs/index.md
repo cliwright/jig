@@ -28,13 +28,14 @@ baked into the template expose you to potential security risks.
 **no template-supplied program ever runs.** Rendering evaluates only the
 standard Go template language and jig's own registered, reviewed string
 functions — a template cannot execute a script, a hook, or a shell command.
-A template is an ordinary directory tree with explicit variable and predictable rendering rules..
+A template is an ordinary directory tree with explicit variables and
+predictable rendering rules.
 
 This buys you:
 
 - **Auditability.** You can read a template top to bottom and know exactly
-  what lands on disk. Rendering a template you didn't write is safe at
-  render time, because there is no mechanism in it that *can* run code.
+  what lands on disk. Rendering a template you didn't write does not
+  execute programs supplied by that template.
 
 - **Diffability.** A template change is a plain text diff. Reviewing one is
   reviewing the scaffold itself.

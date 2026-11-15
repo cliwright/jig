@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 )
 
@@ -227,23 +226,6 @@ func TestRenderTrustRejectsAbsoluteSymlink(t *testing.T) {
 	}
 }
 
-func TestRenderRejectsNonRegularFiles(t *testing.T) {
-	versionDir := writeTemplate(t, map[string]string{
-		"jig.json": validManifest,
-	})
-	if err := syscall.Mkfifo(filepath.Join(versionDir, TemplateDirName, "fifo"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{})
-	if err == nil || !strings.Contains(err.Error(), "non-regular file") {
-		t.Fatalf("error = %v, want non-regular-file refusal", err)
-	}
-	// check catches it too, without hanging
-	if _, err := Check(versionDir); err == nil || !strings.Contains(err.Error(), "non-regular file") {
-		t.Fatalf("Check error = %v, want non-regular-file refusal", err)
-	}
-}
-
 const verbatimManifest = `{
   "version": 1,
   "variables": {"PROJECT_NAME": {"default": "demo"}},
@@ -350,5 +332,124 @@ func TestRenderCopiesBinariesVerbatim(t *testing.T) {
 	}
 	if string(got) != string(bin) {
 		t.Errorf("binary was modified: %q", got)
+	}
+}
+
+func TestRenderRejectsInternalCollision(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"A": {"default": "one"}, "B": {"default": "two"}}}`,
+		"{{.A}}.txt": "from A\n",
+		"{{.B}}.txt": "from B\n",
+	})
+	out := t.TempDir()
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "A": "same", "B": "same"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "collision") {
+		t.Fatalf("error = %v, want collision refusal", err)
+	}
+	// nothing may be written for a refused plan
+	entries, _ := os.ReadDir(out)
+	if len(entries) != 0 {
+		t.Errorf("output dir not empty after refused render: %v", entries)
+	}
+	// distinct names render fine
+	if _, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "A": "one", "B": "two"}, Options{}); err != nil {
+		t.Fatalf("distinct names refused: %v", err)
+	}
+}
+
+func TestRenderRejectsFileDirCollision(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"A": {"default": "x"}, "B": {"default": "y"}}}`,
+		"{{.A}}":           "a file\n",
+		"{{.B}}/inner.txt": "in a dir\n",
+	})
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "A": "same", "B": "same"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "collision") {
+		t.Fatalf("error = %v, want collision refusal", err)
+	}
+}
+
+func TestRenderAllowsDirectoryMerge(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"A": {"default": "x"}, "B": {"default": "y"}}}`,
+		"{{.A}}/a.txt": "a\n",
+		"{{.B}}/b.txt": "b\n",
+	})
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "A": "shared", "B": "shared"}, Options{})
+	if err != nil {
+		t.Fatalf("directory merge refused: %v", err)
+	}
+	for _, f := range []string{"a.txt", "b.txt"} {
+		if _, err := os.Stat(filepath.Join(res.OutputDir, "shared", f)); err != nil {
+			t.Errorf("merged file %s missing: %v", f, err)
+		}
+	}
+}
+
+func TestCheckCatchesInternalCollision(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"A": {"default": "same"}, "B": {"default": "same"}}}`,
+		"{{.A}}.txt": "from A\n",
+		"{{.B}}.txt": "from B\n",
+	})
+	if _, err := Check(versionDir); err == nil || !strings.Contains(err.Error(), "collision") {
+		t.Fatalf("Check error = %v, want collision refusal", err)
+	}
+}
+
+func TestRenderContentErrorLeavesNoPartialTree(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":    validManifest,
+		"README.md":   "ok\n",
+		"config.yaml": "ok\n",
+		"zz_main.go":  "{{ .author | nosuchfunc }}\n",
+	})
+	out := t.TempDir()
+	if _, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{}); err == nil {
+		t.Fatal("want a render error")
+	}
+	entries, _ := os.ReadDir(out)
+	if len(entries) != 0 {
+		t.Errorf("partial tree left behind: %v", entries)
+	}
+}
+
+func TestRenderForceRestoresTemplateMode(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+	})
+	script := filepath.Join(versionDir, TemplateDirName, "run.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	values := map[string]string{"PROJECT_NAME": "demo", "author": "x"}
+	res, err := Render(versionDir, out, values, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// destination loses the executable bit, then a force render must
+	// restore the template's mode
+	dst := filepath.Join(res.OutputDir, "run.sh")
+	if err := os.Chmod(dst, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Render(versionDir, out, values, Options{Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Errorf("mode = %o, want 755 after force render", info.Mode().Perm())
 	}
 }

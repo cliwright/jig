@@ -37,10 +37,12 @@ can answer.
 
 Rendering never overwrites an existing file unless `--force` is given.
 Rendering into a populated directory is fine as long as no file collides —
-the whole render is planned first, so a collision fails before anything is
-written. Rendered names must stay inside the output directory: a value that
-renders to `../anything` or an empty name fails the render, regardless of
-what the manifest's patterns allow.
+and the check is both ways: two template entries rendering to the *same*
+destination also fail. Everything is prepared in memory first — names,
+contents, collisions, containment — so a bad template fails before anything
+is written. Rendered names must stay inside the output directory: a value
+that renders to `../anything` or an empty name fails the render, regardless
+of what the manifest's patterns allow.
 
 ## jig new
 
