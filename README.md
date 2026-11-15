@@ -64,4 +64,7 @@ layouts](https://jig.cliwright.dev/example_layouts/).
 
 ## License
 
-[Apache 2.0](LICENSE).
+[Apache 2.0](LICENSE). See the [changelog](CHANGELOG.md) for what changed
+between versions, and [CONTRIBUTING.md](CONTRIBUTING.md) for how to
+contribute (features start as an RFC, not a PR). Security reports:
+[SECURITY.md](SECURITY.md).
