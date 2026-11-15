@@ -16,6 +16,8 @@ var funcMap = template.FuncMap{
 	"upper":   strings.ToUpper,
 	"replace": replace,
 	"slugify": slugify,
+	"ldelim":  ldelim,
+	"rdelim":  rdelim,
 }
 
 // replace implements {{ .Var | replace "old" "new" }} — all occurrences.
@@ -23,6 +25,14 @@ var funcMap = template.FuncMap{
 func replace(old, new, s string) string {
 	return strings.ReplaceAll(s, old, new)
 }
+
+// ldelim and rdelim emit literal template delimiters, for files whose own
+// syntax collides with Go's: CI workflows and the like use ${{ }} heavily,
+// and {{ ldelim }} / {{ rdelim }} is how a template emits it — e.g.
+// ${{ ldelim }} github.actor {{ rdelim }} renders as ${{ github.actor }}.
+func ldelim() string { return "{{" }
+
+func rdelim() string { return "}}" }
 
 var slugSep = regexp.MustCompile(`[^a-z0-9-]+`)
 

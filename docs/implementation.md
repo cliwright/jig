@@ -33,8 +33,41 @@ possible.
 | `upper` | `upper s` | `{{upper .KIND}}` | `tool` → `TOOL` |
 | `replace` | `replace old new s` | `{{.PROJECT_NAME \| replace "-" "_"}}` | `my-project` → `my_project` |
 | `slugify` | `slugify s` | `{{slugify .TITLE}}` | `My Cool App!` → `my-cool-app` |
+| `ldelim` | `ldelim` | `{{ldelim}}` | `{{` |
+| `rdelim` | `rdelim` | `{{rdelim}}` | `}}` |
 
 `replace` takes the string last so it composes in pipelines.
+
+## Templating files that contain `{{ }}`
+
+CI workflows, Azure pipelines, and friends use `${{ }}` as their own
+expression syntax — which collides with Go's delimiters when such a file is
+rendered. Three ways out, in order of preference:
+
+1. **Static files: use a `verbatim` directory.** Most workflow files need
+   no jig variables at all; ship them unrendered.
+2. **Hybrid files: use `ldelim`/`rdelim`.** When a file needs a few jig
+   variables among many `${{ }}` expressions:
+
+   ```yaml
+   name: {{ .PROJECT_NAME }}
+   on:
+     push:
+       branches: [${{ ldelim }} github.default_branch {{ rdelim }}]
+   ```
+
+   renders as:
+
+   ```yaml
+   name: my-tool
+   on:
+     push:
+       branches: [${{ github.default_branch }}]
+   ```
+
+3. **A single occurrence:** the `text/template` escape,
+   `${{"{{"}} … }}`, works too — but it doesn't stay readable beyond one
+   or two uses.
 
 `slugify` lowercases and collapses every run of characters outside
 `[a-z0-9-]` into a single dash, trimming leading and trailing dashes —

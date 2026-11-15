@@ -36,3 +36,16 @@ func TestRenderStringUsesFuncMapAndMissingKey(t *testing.T) {
 		t.Error("want missingkey=error")
 	}
 }
+
+func TestDelims(t *testing.T) {
+	got, err := renderString(
+		`run: echo "${{ ldelim }} github.ref {{ rdelim }}" # {{ .PROJECT_NAME }}`,
+		map[string]string{"PROJECT_NAME": "demo"}, map[string]bool{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `run: echo "${{ github.ref }}" # demo`
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

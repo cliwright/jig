@@ -506,3 +506,23 @@ func TestRenderRejectsCaseOnlyCollision(t *testing.T) {
 		t.Fatalf("error = %v, want case-collision refusal", err)
 	}
 }
+
+func TestRenderWorkflowFile(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+		".github/workflows/ci.yml": "name: {{ .PROJECT_NAME }}\n" +
+			"on:\n  push:\n    branches: [${{ ldelim }} github.default_branch {{ rdelim }}]\n",
+	})
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(res.OutputDir, ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "name: demo\non:\n  push:\n    branches: [${{ github.default_branch }}]\n"
+	if string(data) != want {
+		t.Errorf("ci.yml = %q, want %q", data, want)
+	}
+}
