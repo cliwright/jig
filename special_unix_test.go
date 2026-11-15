@@ -40,3 +40,22 @@ func TestBumpRefusesNonRegularFiles(t *testing.T) {
 		t.Fatalf("error = %v, want non-regular-file refusal", err)
 	}
 }
+
+func TestRenderForceRefusesSpecialDestFile(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+		"file.txt": "new\n",
+	})
+	out := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(out, "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(out, "demo", "file.txt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// must fail fast, not block opening the FIFO for writing
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Force: true})
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("error = %v, want not-a-regular-file refusal", err)
+	}
+}

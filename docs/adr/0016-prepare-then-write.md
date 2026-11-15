@@ -28,9 +28,18 @@ create directories, write the prepared bytes, recreate vetted symlinks.
 
 - A template error — parse, execution, collision, containment — never
   leaves a partial tree. The "planned first" documentation is now true.
+- Collisions are judged case-insensitively: names differing only by case
+  are the same file on default macOS/Windows filesystems, and a template
+  must render identically everywhere — so they are rejected conservatively
+  rather than rendering differently per OS.
 - Modes are exact: writes are followed by `Chmod` to the template's mode,
   so executables survive umask, and `--force` restores the template's mode
   instead of keeping the old file's.
+- Writes replace rather than truncate (temp file in the same directory,
+  then rename): a `--force` overwrite of a hard-linked destination does
+  not modify the other names sharing that inode — containment covers the
+  filesystem, not just paths. Existing non-regular destinations (FIFO,
+  device) are refused rather than opened.
 - Accepted limits: disk failures mid-write and concurrent filesystem
   changes are outside the guarantee; projects are held in memory, which is
   irrelevant at scaffold sizes.

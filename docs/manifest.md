@@ -102,8 +102,18 @@ answering `PROJECT_NAME` differently also fixes `PKG`.
 
 - **Names and contents** of text files render as Go `text/template` with
   the resolved values: `README.md`, `src/{{.PKG}}/main.go`, and so on.
-- **Binary files** (images, archives, …) copy through unchanged.
-- **Executable bits** are preserved.
+- **Binary files** (images, archives, …) copy through unchanged. Detection
+  is a content heuristic: a NUL byte in the first 512 bytes (the same
+  heuristic git and net/http use). A file without one is treated as text
+  and rendered — if a file must never be parsed, put it in a `verbatim`
+  directory rather than relying on the heuristic.
+- **Executable bits** are preserved — exactly: written files are `Chmod`ed
+  to the template's mode, so umask and pre-existing destination modes
+  (`--force`) don't dilute them. Overwrites *replace* the destination
+  (temp file + rename) rather than truncating it, so a `--force` render
+  can't modify data outside the output tree through a hard-linked
+  destination, and an existing non-regular destination (FIFO, device) is
+  refused.
 - Using an **undeclared variable** anywhere in a name or body fails the
   render — the manifest is the whole contract.
 - Declaring a variable the template never uses is not an error, but jig

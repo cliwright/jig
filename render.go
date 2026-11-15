@@ -236,18 +236,18 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 			return fmt.Errorf("rendering %s name %s: %w", kind, rel, err)
 		}
 		if d.IsDir() {
-			if prev, ok := planned[out]; ok && prev.kind != "directory" {
+			if prev, ok := planned[dstKey(out)]; ok && prev.kind != "directory" {
 				return fmt.Errorf("collision: file %s and directory %s both render to %s", prev.rel, rel, out)
 			}
-			planned[out] = dstKind{kind: "directory", rel: rel}
+			planned[dstKey(out)] = dstKind{kind: "directory", rel: rel}
 			renderedDirs[relSlash] = out
 			plan.dirs = append(plan.dirs, out)
 			return nil
 		}
-		if prev, ok := planned[out]; ok {
+		if prev, ok := planned[dstKey(out)]; ok {
 			return fmt.Errorf("collision: %s %s and %s %s both render to %s", prev.kind, prev.rel, kind, rel, out)
 		}
-		planned[out] = dstKind{kind: kind, rel: rel}
+		planned[dstKey(out)] = dstKind{kind: kind, rel: rel}
 		if d.Type()&fs.ModeSymlink != 0 {
 			linkTarget, err := checkSymlink(skel, path, trust)
 			if err != nil {
@@ -280,6 +280,15 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 		return nil, err
 	}
 	return plan, nil
+}
+
+// dstKey is the collision-map key for a planned destination. Keys are
+// case-folded: README.md and readme.md are distinct files on ext4 but the
+// same file on default macOS/Windows filesystems, and a template must
+// render identically everywhere — so case-only differences are rejected
+// conservatively rather than rendering differently per OS.
+func dstKey(dst string) string {
+	return strings.ToLower(dst)
 }
 
 // checkSymlink vets a symlink found in the template. Links are rejected
@@ -377,17 +386,53 @@ func isVerbatim(rel string, verbatim []string) bool {
 }
 
 // writeFile writes one prepared file with exactly the template's mode
-// bits: WriteFile's perm only applies at creation and is masked by umask,
-// so the Chmod makes the mode exact — templates can ship executables, and
-// --force restores the template's mode rather than keeping the old file's.
+// bits. The write replaces rather than truncates: data lands in a temp
+// file in the same directory and is renamed over the destination, so a
+// --force overwrite of a hard-linked file does not modify the other names
+// sharing that inode (possibly outside the output tree). An existing
+// destination that is not a regular file — a FIFO would block on open, a
+// device is worse — is refused outright. (Symlinks never reach here:
+// checkDestChain rejects them earlier.)
 func writeFile(dst string, data []byte, mode fs.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if info, err := os.Lstat(dst); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("destination %s exists and is not a regular file", dst)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("checking %s: %w", dst, err)
+	}
+	dir := filepath.Dir(dst)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(dst, data, mode); err != nil {
+	tmp, err := os.CreateTemp(dir, ".jig-*")
+	if err != nil {
 		return err
 	}
-	return os.Chmod(dst, mode)
+	tmpName := tmp.Name()
+	_, werr := tmp.Write(data)
+	cerr := tmp.Close()
+	if werr != nil {
+		err = werr
+	} else {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmpName, mode)
+	}
+	if err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("writing %s: %w", dst, err)
+	}
+	if err := os.Rename(tmpName, dst); err != nil {
+		// Windows cannot rename over an existing file: remove and retry.
+		os.Remove(dst)
+		if err2 := os.Rename(tmpName, dst); err2 != nil {
+			os.Remove(tmpName)
+			return fmt.Errorf("writing %s: %w", dst, err2)
+		}
+	}
+	return nil
 }
 
 // renderString renders one name or path fragment as a template. The

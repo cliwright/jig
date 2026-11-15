@@ -453,3 +453,56 @@ func TestRenderForceRestoresTemplateMode(t *testing.T) {
 		t.Errorf("mode = %o, want 755 after force render", info.Mode().Perm())
 	}
 }
+
+func TestRenderForceDoesNotWriteThroughHardLink(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+		"file.txt": "new\n",
+	})
+	out := t.TempDir()
+	external := filepath.Join(t.TempDir(), "external.txt")
+	if err := os.WriteFile(external, []byte("original\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(out, "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(out, "demo", "file.txt")
+	if err := os.Link(external, dst); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	// the render replaced the destination inode; the alias must be untouched
+	data, _ := os.ReadFile(external)
+	if string(data) != "original\n" {
+		t.Errorf("hard-linked file outside the tree was modified: %q", data)
+	}
+	data, _ = os.ReadFile(dst)
+	if string(data) != "new\n" {
+		t.Errorf("destination = %q, want new", data)
+	}
+	ei, _ := os.Stat(external)
+	di, _ := os.Stat(dst)
+	if os.SameFile(ei, di) {
+		t.Error("destination still shares an inode with the external file")
+	}
+}
+
+func TestRenderRejectsCaseOnlyCollision(t *testing.T) {
+	// source names differ; rendered names collide case-insensitively.
+	// (Two literal files README.md/readme.md can't even coexist in the
+	// fixture on a case-insensitive filesystem.)
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"A": {"default": "README"}, "B": {"default": "readme"}}}`,
+		"{{.A}}.md": "upper\n",
+		"{{.B}}.md": "lower\n",
+	})
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "A": "README", "B": "readme"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "collision") {
+		t.Fatalf("error = %v, want case-collision refusal", err)
+	}
+}
