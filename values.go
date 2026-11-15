@@ -10,16 +10,26 @@ import (
 )
 
 // Prompter collects variable values interactively, mutating values in
-// place (typically defaulting on empty input). A nil Prompter skips
-// prompting entirely.
-type Prompter func(m *Manifest, values map[string]string) error
+// place (typically defaulting on empty input). values arrives pre-filled
+// with the resolved defaults; locked names came from --vars-file/--var and
+// must keep their values — answering a variable may re-derive its
+// dependents, but never over a locked value. A nil Prompter skips prompting
+// entirely.
+type Prompter func(m *Manifest, values map[string]string, locked map[string]bool) error
 
-// StdinPrompter returns a Prompter asking for each variable in sorted
-// order on in/out; an empty answer keeps the current value.
+// StdinPrompter returns a Prompter asking for each variable in dependency
+// order on in/out; an empty answer keeps the current value. Answering a
+// variable re-derives the defaults of everything derived from it before
+// those dependents are prompted, so a changed PROJECT_NAME shows fresh
+// derived defaults downstream instead of stale ones.
 func StdinPrompter(in io.Reader, out io.Writer) Prompter {
-	return func(m *Manifest, values map[string]string) error {
+	return func(m *Manifest, values map[string]string, locked map[string]bool) error {
 		reader := bufio.NewReader(in)
-		for _, name := range m.Names() {
+		skip := make(map[string]bool, len(locked))
+		for name := range locked {
+			skip[name] = true
+		}
+		for _, name := range m.order {
 			v := m.Variables[name]
 			label := v.Prompt
 			if label == "" {
@@ -33,8 +43,13 @@ func StdinPrompter(in io.Reader, out io.Writer) Prompter {
 			if err != nil {
 				return fmt.Errorf("reading answer for %s: %w", name, err)
 			}
-			if answer = strings.TrimSpace(answer); answer != "" {
-				values[name] = answer
+			if answer = strings.TrimSpace(answer); answer == "" {
+				continue
+			}
+			values[name] = answer
+			skip[name] = true // an explicit answer wins over re-derivation
+			if err := m.rederive(values, name, skip); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -45,9 +60,11 @@ func StdinPrompter(in io.Reader, out io.Writer) Prompter {
 // defaults resolved in dependency order, with varsFile (when non-empty) and
 // then the key=value pairs in set as explicit overrides, and finally passed
 // to prompt (when non-nil). An override wins for its variable; defaults
-// derived from it re-evaluate against the overridden value. Later sources
-// win. The result is not validated here — Render validates values against
-// the manifest, patterns included.
+// derived from it re-evaluate against the overridden value — both when
+// resolving and live during prompting, where answers re-derive their
+// dependents before they are shown. Later sources win. The result is not
+// validated here — Render validates values against the manifest, patterns
+// included.
 func ResolveValues(m *Manifest, varsFile string, set []string, prompt Prompter) (map[string]string, error) {
 	overrides := map[string]string{}
 	if varsFile != "" {
@@ -76,7 +93,11 @@ func ResolveValues(m *Manifest, varsFile string, set []string, prompt Prompter) 
 		}
 	}
 	if prompt != nil {
-		if err := prompt(m, values); err != nil {
+		locked := make(map[string]bool, len(overrides))
+		for k := range overrides {
+			locked[k] = true
+		}
+		if err := prompt(m, values, locked); err != nil {
 			return nil, err
 		}
 	}

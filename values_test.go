@@ -7,17 +7,13 @@ import (
 	"testing"
 )
 
-func testManifest(t *testing.T) *Manifest {
+func manifestFromJSON(t *testing.T, manifest string) *Manifest {
 	t.Helper()
 	dir := t.TempDir()
 	skel := filepath.Join(dir, TemplateDirName)
 	if err := os.MkdirAll(skel, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := `{"version": 1, "variables": {
-		"PROJECT_NAME": {"default": "my-project", "prompt": "Project name"},
-		"author": {"default": "someone"}
-	}}`
 	if err := os.WriteFile(filepath.Join(skel, ManifestFileName), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -26,6 +22,14 @@ func testManifest(t *testing.T) *Manifest {
 		t.Fatal(err)
 	}
 	return m
+}
+
+func testManifest(t *testing.T) *Manifest {
+	t.Helper()
+	return manifestFromJSON(t, `{"version": 1, "variables": {
+		"PROJECT_NAME": {"default": "my-project", "prompt": "Project name"},
+		"author": {"default": "someone"}
+	}}`)
 }
 
 func TestResolveValuesDefaults(t *testing.T) {
@@ -44,7 +48,7 @@ func TestResolveValuesPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 	var prompted map[string]string
-	prompt := func(m *Manifest, values map[string]string) error {
+	prompt := func(m *Manifest, values map[string]string, locked map[string]bool) error {
 		values["author"] = "from-prompt"
 		prompted = values
 		return nil
@@ -122,5 +126,82 @@ func TestStdinPrompterShowsChoices(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "license (MIT | Apache-2.0) [MIT]: ") {
 		t.Fatalf("prompt should list the choices, got %q", out.String())
+	}
+}
+
+// derivedManifest declares a root variable and a dependent deriving from it.
+const derivedManifest = `{"version": 1, "variables": {
+	"PROJECT_NAME": {"default": "my-tool"},
+	"PYTHON_PACKAGE": {"default": "{{ .PROJECT_NAME | replace \"-\" \"_\" }}"}
+}}`
+
+// Answering PROJECT_NAME must re-derive PYTHON_PACKAGE's default before it
+// is prompted — both the shown default and the final value.
+func TestStdinPrompterRederivesDependents(t *testing.T) {
+	var out strings.Builder
+	values, err := ResolveValues(manifestFromJSON(t, derivedManifest), "", nil,
+		StdinPrompter(strings.NewReader("cool-cli\n\n"), &out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["PYTHON_PACKAGE"] != "cool_cli" {
+		t.Fatalf("dependent should re-derive from the answer, got %q", values["PYTHON_PACKAGE"])
+	}
+	if !strings.Contains(out.String(), "PYTHON_PACKAGE [cool_cli]: ") {
+		t.Fatalf("prompt should show the re-derived default, got %q", out.String())
+	}
+}
+
+// An explicit --var value is locked: answering its ancestor interactively
+// must not re-derive over it.
+func TestStdinPrompterKeepsLockedOverride(t *testing.T) {
+	var out strings.Builder
+	values, err := ResolveValues(manifestFromJSON(t, derivedManifest), "",
+		[]string{"PYTHON_PACKAGE=custom"}, StdinPrompter(strings.NewReader("cool-cli\n\n"), &out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["PYTHON_PACKAGE"] != "custom" {
+		t.Fatalf("locked override should win, got %q", values["PYTHON_PACKAGE"])
+	}
+}
+
+// An interactive answer for the dependent itself wins over re-derivation.
+func TestStdinPrompterAnsweredDependentWins(t *testing.T) {
+	values, err := ResolveValues(manifestFromJSON(t, derivedManifest), "", nil,
+		StdinPrompter(strings.NewReader("cool-cli\nmy-own-pkg\n"), &strings.Builder{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["PYTHON_PACKAGE"] != "my-own-pkg" {
+		t.Fatalf("the explicit answer should win, got %q", values["PYTHON_PACKAGE"])
+	}
+}
+
+// Prompting runs in dependency order — roots before their dependents, even
+// when sorted order would ask the dependent first — and re-derivation is
+// transitive through intermediate variables.
+func TestStdinPrompterPromptsInDependencyOrder(t *testing.T) {
+	m := manifestFromJSON(t, `{"version": 1, "variables": {
+		"PROJECT_NAME": {"default": "demo"},
+		"ZROOT": {"default": "z"},
+		"AMID": {"default": "{{ .ZROOT }}-mid"},
+		"BLEAF": {"default": "{{ .AMID }}-leaf"}
+	}}`)
+	var out strings.Builder
+	values, err := ResolveValues(m, "", nil, StdinPrompter(strings.NewReader("\nx\n\n\n"), &out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["BLEAF"] != "x-mid-leaf" {
+		t.Fatalf("re-derivation should be transitive, got %q", values["BLEAF"])
+	}
+	zroot := strings.Index(out.String(), "ZROOT [")
+	amid := strings.Index(out.String(), "AMID [")
+	if zroot < 0 || amid < 0 || amid < zroot {
+		t.Fatalf("ZROOT should prompt before its dependent AMID, got %q", out.String())
+	}
+	if !strings.Contains(out.String(), "BLEAF [x-mid-leaf]: ") {
+		t.Fatalf("prompt should show the transitively re-derived default, got %q", out.String())
 	}
 }

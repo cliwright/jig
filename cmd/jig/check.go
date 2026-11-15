@@ -19,8 +19,10 @@ func newCheckCmd() *cobra.Command {
 		Use:   "check",
 		Short: "Dry-render a template, reporting errors and unused variables",
 		Long: `Dry-render a template without writing anything: the manifest is
-validated, every name and text file is parsed and rendered against the
-resolved defaults, and declared-but-unused variables are reported as
+validated, the resolved defaults are validated against their patterns and
+choices, every name and text file is parsed and rendered against those
+defaults, and references to undeclared variables fail even in branches the
+defaults don't execute. Declared-but-unused variables are reported as
 warnings. Exits non-zero on any error — run it before shipping a template.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {

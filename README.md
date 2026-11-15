@@ -61,3 +61,7 @@ the [CLI reference](https://jig.cliwright.dev/cli/), the [`jig.json`
 manifest](https://jig.cliwright.dev/manifest/), the [template
 implementation](https://jig.cliwright.dev/implementation/), and [example
 layouts](https://jig.cliwright.dev/example_layouts/).
+
+## License
+
+[Apache 2.0](LICENSE).

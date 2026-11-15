@@ -33,7 +33,10 @@ Prompting requires an interactive terminal. `--vars-file` renders
 non-interactively; so does `--var` when stdin is not a terminal (remaining
 variables take their resolved defaults). With piped or absent stdin and no
 values at all, `render` fails fast instead of hanging on a prompt nobody
-can answer.
+can answer. Interactive prompts run in dependency order: answering a
+variable re-derives the defaults of everything derived from it before those
+dependents are prompted, while values supplied via `--vars-file`/`--var`
+stay locked.
 
 Rendering never overwrites an existing file unless `--force` is given.
 Rendering into a populated directory is fine as long as no file collides —
@@ -76,8 +79,11 @@ jig check --template <name-or-path> [--version N] [--templates-dir <dir>]
 ```
 
 Dry-renders a template without writing anything: the manifest is validated,
+the resolved defaults are validated against their own patterns and choices,
 every file and directory name and every text file's content is parsed and
-rendered against the resolved defaults, and declared-but-unused variables
+rendered against those defaults (containment applies to the rendered
+project name too), and references to undeclared variables fail even in
+template branches the defaults don't execute. Declared-but-unused variables
 print as warnings. Exits non-zero on any error — run it before shipping a
 template, and in CI.
 

@@ -9,12 +9,18 @@ func collectUsed(node parse.Node, used map[string]bool) {
 	switch n := node.(type) {
 	case nil:
 	case *parse.ListNode:
+		if n == nil {
+			return // a branch without an else has a typed-nil ElseList
+		}
 		for _, child := range n.Nodes {
 			collectUsed(child, used)
 		}
 	case *parse.ActionNode:
 		collectUsed(n.Pipe, used)
 	case *parse.PipeNode:
+		if n == nil {
+			return
+		}
 		for _, cmd := range n.Cmds {
 			collectUsed(cmd, used)
 		}

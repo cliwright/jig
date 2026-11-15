@@ -17,8 +17,12 @@ A variable's `default` may template over other variables
 dependency order at load; references to undeclared variables,
 self-references, and cycles are load errors. Explicit overrides
 (`--vars-file`, `--var`, interactive answers) win per-variable, and
-dependents re-derive against the overridden value. A variable referenced by
-another variable's default counts as used (no cruft warning).
+dependents re-derive against the overridden value. Interactive prompting
+asks in dependency order and re-derives live: answering a variable updates
+the defaults of everything derived from it before those dependents are
+prompted, so a displayed default is never stale. Values supplied via
+`--vars-file`/`--var` are locked and never re-derived over. A variable
+referenced by another variable's default counts as used (no cruft warning).
 
 ## Consequences
 

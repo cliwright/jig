@@ -70,6 +70,38 @@ func TestCheckCatchesBrokenTemplates(t *testing.T) {
 			},
 			want: "PROJECT_NAME",
 		},
+		{
+			name: "default violating its own pattern",
+			files: map[string]string{
+				"jig.json": `{"version": 1, "variables": {
+					"PROJECT_NAME": {"default": "demo"},
+					"author": {"default": "Not Lower!", "pattern": "^[a-z]+$"}
+				}}`,
+				"README.md": "{{ .author }}\n",
+			},
+			want: "does not match pattern",
+		},
+		{
+			name: "escaping project name",
+			files: map[string]string{
+				"jig.json": `{"version": 1, "variables": {
+					"PROJECT_NAME": {"default": "../escape"}
+				}}`,
+				"README.md": "x\n",
+			},
+			want: "escapes the output directory",
+		},
+		{
+			name: "undeclared variable in an untaken branch",
+			files: map[string]string{
+				"jig.json": `{"version": 1, "variables": {
+					"PROJECT_NAME": {"default": "demo"},
+					"WITH_TESTS": {"default": "no", "choices": ["yes", "no"]}
+				}}`,
+				"README.md": "{{if eq .WITH_TESTS \"yes\"}}{{ .NOPE }}{{end}}\n",
+			},
+			want: "undeclared variable NOPE",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -78,5 +110,21 @@ func TestCheckCatchesBrokenTemplates(t *testing.T) {
 				t.Fatalf("error = %v, want substring %q", err, tt.want)
 			}
 		})
+	}
+}
+
+// A declared variable in a branch the defaults don't execute must still
+// pass: the static undeclared-variable check rejects only names the
+// manifest does not declare.
+func TestCheckAllowsDeclaredVariablesInUntakenBranches(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"WITH_TESTS": {"default": "no", "choices": ["yes", "no"]}
+		}}`,
+		"README.md": "{{if eq .WITH_TESTS \"yes\"}}{{ .PROJECT_NAME }}{{end}}\n",
+	})
+	if _, err := Check(versionDir); err != nil {
+		t.Fatalf("Check: %v", err)
 	}
 }

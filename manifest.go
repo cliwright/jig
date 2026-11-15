@@ -53,6 +53,7 @@ type Manifest struct {
 	order      []string                      // variables in dependency-resolved evaluation order
 	defaults   map[string]*template.Template // parsed Var.Default per variable
 	referenced map[string]bool               // variables another variable's default derives from
+	children   map[string][]string           // variable → the variables whose defaults derive from it
 }
 
 // LoadManifest reads path, validates it against the embedded manifest
@@ -117,7 +118,7 @@ func LoadManifest(path string) (*Manifest, error) {
 func (m *Manifest) parseDefaults() error {
 	m.defaults = make(map[string]*template.Template, len(m.Variables))
 	m.referenced = map[string]bool{}
-	dependents := map[string][]string{}
+	m.children = map[string][]string{}
 	indegree := map[string]int{}
 	for _, name := range m.Names() {
 		t, err := template.New("default:" + name).Funcs(funcMap).Option("missingkey=error").Parse(m.Variables[name].Default)
@@ -134,7 +135,7 @@ func (m *Manifest) parseDefaults() error {
 			if _, ok := m.Variables[dep]; !ok {
 				return fmt.Errorf("variable %s: default references undeclared variable %s", name, dep)
 			}
-			dependents[dep] = append(dependents[dep], name)
+			m.children[dep] = append(m.children[dep], name)
 			indegree[name]++
 			m.referenced[dep] = true
 		}
@@ -149,7 +150,7 @@ func (m *Manifest) parseDefaults() error {
 		name := ready[0]
 		ready = ready[1:]
 		m.order = append(m.order, name)
-		for _, dep := range dependents[name] {
+		for _, dep := range m.children[name] {
 			if indegree[dep]--; indegree[dep] == 0 {
 				ready = append(ready, dep)
 			}
@@ -235,6 +236,38 @@ func (m *Manifest) resolveDefaults(overrides map[string]string) (map[string]stri
 		values[name] = buf.String()
 	}
 	return values, nil
+}
+
+// rederive re-evaluates the defaults of everything transitively derived
+// from changed, in dependency order, against the current values. Locked
+// variables — supplied explicitly via --vars-file/--var, or already
+// answered in the current prompt run — keep their values. Interactive
+// prompting uses this to keep displayed derived defaults in step with the
+// answers given so far.
+func (m *Manifest) rederive(values map[string]string, changed string, locked map[string]bool) error {
+	stale := map[string]bool{}
+	queue := []string{changed}
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		for _, child := range m.children[name] {
+			if !stale[child] {
+				stale[child] = true
+				queue = append(queue, child)
+			}
+		}
+	}
+	for _, name := range m.order {
+		if !stale[name] || locked[name] {
+			continue
+		}
+		var buf bytes.Buffer
+		if err := m.defaults[name].Execute(&buf, values); err != nil {
+			return fmt.Errorf("variable %s: resolving default: %w", name, err)
+		}
+		values[name] = buf.String()
+	}
+	return nil
 }
 
 func sortedKeys[V any](m map[string]V) []string {
