@@ -9,6 +9,11 @@ Releases before 0.4.1 predate this changelog.
 
 ## [Unreleased]
 
+### Added
+
+- ADR 18 records the strings-only decision: no list or typed variables,
+  with the reasoning and the revisit trigger.
+
 ### Fixed
 
 - `render` no longer mistakes `/dev/null` stdin for an interactive

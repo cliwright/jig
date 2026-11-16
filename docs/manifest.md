@@ -77,7 +77,8 @@ string `"false"`. The idiomatic patterns:
   literals. There is no arithmetic in the func map by design.
 
 Richer types (real booleans, numbers, lists) are a deliberate omission,
-not an oversight; adding them would be a new ADR, not a quiet feature.
+not an oversight — see [ADR 18](adr/0018-strings-only.md); adding them
+would be a new ADR, not a quiet feature.
 
 ## Derived defaults
 
