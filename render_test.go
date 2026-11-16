@@ -535,14 +535,14 @@ func TestRenderRefusesWriteThroughFileComponent(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(out, "demo"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// "sub" exists as a regular file: stating anything beneath it fails
-	// with ENOTDIR, which must surface, not be mistaken for absence
+	// "sub" exists as a regular file: writing beneath it must be refused
+	// by name, identically on every platform
 	if err := os.WriteFile(filepath.Join(out, "demo", "sub"), []byte("blocker\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Force: true})
-	if err == nil || !strings.Contains(err.Error(), "checking") {
-		t.Fatalf("error = %v, want a destination-chain failure", err)
+	if err == nil || !strings.Contains(err.Error(), "non-directory") {
+		t.Fatalf("error = %v, want a non-directory refusal", err)
 	}
 }
 

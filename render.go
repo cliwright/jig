@@ -324,19 +324,25 @@ func checkSymlink(skel, path string, trust bool) (string, error) {
 }
 
 // checkDestChain walks the existing components of dst (relative to root,
-// the output directory) with Lstat and refuses if any is a symlink.
+// the output directory) with Lstat and refuses if any is a symlink, or if
+// any intermediate component is not a directory.
 // containedPath keeps rendered paths lexically inside the output directory;
 // this keeps the actual filesystem writes inside it. Checking stops at the
 // first component that does not exist — everything below it will be created
 // by the render itself. A symlink as root itself is the caller's explicit
-// choice and allowed.
+// choice and allowed. The non-directory refusal is explicit rather than
+// left to the write phase: on Windows a path beneath a file stats as
+// "not found" and would otherwise fail later with a misleading mkdir
+// error. The final component is exempt — it may legitimately be an
+// existing regular file being overwritten under Force.
 func checkDestChain(root, dst string) error {
 	rel, err := filepath.Rel(root, dst)
 	if err != nil {
 		return err
 	}
+	segs := strings.Split(rel, string(filepath.Separator))
 	cur := root
-	for _, seg := range strings.Split(rel, string(filepath.Separator)) {
+	for i, seg := range segs {
 		cur = filepath.Join(cur, seg)
 		info, err := os.Lstat(cur)
 		if os.IsNotExist(err) {
@@ -347,6 +353,9 @@ func checkDestChain(root, dst string) error {
 		}
 		if info.Mode()&fs.ModeSymlink != 0 {
 			return fmt.Errorf("destination %s contains symlink %s: refusing to write through it", dst, cur)
+		}
+		if i < len(segs)-1 && !info.IsDir() {
+			return fmt.Errorf("destination %s contains non-directory %s: refusing to write through it", dst, cur)
 		}
 	}
 	return nil

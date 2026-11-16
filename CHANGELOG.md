@@ -9,6 +9,20 @@ Releases before 0.4.1 predate this changelog.
 
 ## [Unreleased]
 
+### Fixed
+
+- A destination path with a regular file as an intermediate component is
+  now refused explicitly and identically on every platform
+  (`destination ... contains non-directory ...`). On Windows the write
+  previously sailed past the destination-chain check — a path beneath a
+  file stats as "not found" there — and failed later with a misleading
+  mkdir error (`The system cannot find the path specified`).
+- The test suite covers the previously untested error paths: manifest and
+  value resolution failures, destination-chain and write-phase failures,
+  unused-variable warnings, `--templates-dir` defaulting, every
+  `collectUsed` branch kind, and `main`'s error exit. Coverage is now
+  ~92% in the library and ~98% in the CLI.
+
 ## [0.4.5] - 2026-11-16
 
 ### Added
