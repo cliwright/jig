@@ -56,3 +56,39 @@ func TestBumpRefusesSymlinks(t *testing.T) {
 		t.Fatalf("error = %v, want symlink refusal", err)
 	}
 }
+
+func TestBumpRejectsNonVersionDir(t *testing.T) {
+	// a directory holding {{.PROJECT_NAME}} resolves as a version dir
+	// as-is; bumping one not named v<N> has no "next" to compute
+	dir := t.TempDir()
+	skel := filepath.Join(dir, "my-template", TemplateDirName)
+	if err := os.MkdirAll(skel, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skel, "jig.json"), []byte(validManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Bump(t.TempDir(), filepath.Join(dir, "my-template"))
+	if err == nil || !strings.Contains(err.Error(), "not v<N>") {
+		t.Fatalf("error = %v, want a not-v<N> refusal", err)
+	}
+}
+
+func TestBumpRefusesExistingNextVersion(t *testing.T) {
+	// bumping a version directory given directly (v1, while v2 exists)
+	// would land on the existing v2
+	templatesDir := t.TempDir()
+	for _, v := range []string{"v1", "v2"} {
+		skel := filepath.Join(templatesDir, "python", "std", "lib", v, TemplateDirName)
+		if err := os.MkdirAll(skel, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skel, "jig.json"), []byte(validManifest), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := Bump(templatesDir, filepath.Join(templatesDir, "python", "std", "lib", "v1"))
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("error = %v, want an already-exists refusal", err)
+	}
+}

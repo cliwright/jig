@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -237,5 +238,172 @@ func TestRootHelpPointsAgentsAtAgentsCmd(t *testing.T) {
 	}
 	if !strings.Contains(out, "jig agents") {
 		t.Errorf("root help should point agents at jig agents, got %q", out)
+	}
+}
+
+func TestRenderCmdTemplateNotFound(t *testing.T) {
+	_, err := run(t, []string{"render", "--template", "no/such/template",
+		"--templates-dir", t.TempDir(), "--output", t.TempDir()}, pipeStdin(t))
+	if err == nil || !strings.Contains(err.Error(), "template") {
+		t.Fatalf("error = %v, want a template resolution error", err)
+	}
+}
+
+func TestRenderCmdBrokenManifest(t *testing.T) {
+	templatesDir := fixtureTemplate(t)
+	skel := filepath.Join(templatesDir, "python", "std", "lib", "v1", jig.TemplateDirName)
+	if err := os.WriteFile(filepath.Join(skel, "jig.json"), []byte("not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := run(t, []string{"render", "--template", "python/std/lib",
+		"--templates-dir", templatesDir, "--output", t.TempDir()}, pipeStdin(t))
+	if err == nil || !strings.Contains(err.Error(), "parsing") {
+		t.Fatalf("error = %v, want a manifest error", err)
+	}
+}
+
+func TestRenderCmdRejectsMalformedVar(t *testing.T) {
+	_, err := run(t, []string{"render", "--template", "python/std/lib",
+		"--templates-dir", fixtureTemplate(t), "--output", t.TempDir(),
+		"--var", "noequals"}, pipeStdin(t))
+	if err == nil || !strings.Contains(err.Error(), "key=value") {
+		t.Fatalf("error = %v, want a key=value refusal", err)
+	}
+}
+
+func TestRenderCmdRefusesOverwrite(t *testing.T) {
+	templatesDir := fixtureTemplate(t)
+	out := t.TempDir()
+	args := []string{"render", "--template", "python/std/lib",
+		"--templates-dir", templatesDir, "--output", out, "--var", "PROJECT_NAME=demo"}
+	if _, err := run(t, args, pipeStdin(t)); err != nil {
+		t.Fatalf("first render: %v", err)
+	}
+	if _, err := run(t, args, pipeStdin(t)); err == nil || !strings.Contains(err.Error(), "would overwrite") {
+		t.Fatalf("error = %v, want an overwrite refusal", err)
+	}
+}
+
+func TestRenderCmdWarnsUnusedVariables(t *testing.T) {
+	templatesDir := fixtureTemplate(t)
+	skel := filepath.Join(templatesDir, "python", "std", "lib", "v1", jig.TemplateDirName)
+	manifest := `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}, "cruft": {"default": "x"}}}`
+	if err := os.WriteFile(filepath.Join(skel, "jig.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := run(t, []string{"render", "--template", "python/std/lib",
+		"--templates-dir", templatesDir, "--output", t.TempDir(),
+		"--var", "PROJECT_NAME=demo"}, pipeStdin(t))
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(out, "warning: variable cruft") {
+		t.Errorf("output = %q, want an unused-variable warning", out)
+	}
+}
+
+func TestRenderCmdTemplatesDirDefaultsToCwd(t *testing.T) {
+	t.Setenv("JIG_TEMPLATES_DIR", "")
+	t.Chdir(fixtureTemplate(t))
+	_, err := run(t, []string{"render", "--template", "python/std/lib",
+		"--output", t.TempDir(), "--var", "PROJECT_NAME=demo"}, pipeStdin(t))
+	if err != nil {
+		t.Fatalf("render with default templates dir: %v", err)
+	}
+}
+
+func TestCheckCmdTemplateNotFound(t *testing.T) {
+	_, err := run(t, []string{"check", "--template", "no/such/template", "--templates-dir", t.TempDir()}, nil)
+	if err == nil {
+		t.Fatal("want a template resolution error")
+	}
+}
+
+func TestCheckCmdWarnsUnusedVariables(t *testing.T) {
+	templatesDir := fixtureTemplate(t)
+	skel := filepath.Join(templatesDir, "python", "std", "lib", "v1", jig.TemplateDirName)
+	manifest := `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}, "cruft": {"default": "x"}}}`
+	if err := os.WriteFile(filepath.Join(skel, "jig.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := run(t, []string{"check", "--template", "python/std/lib", "--templates-dir", templatesDir}, nil)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if !strings.Contains(out, "warning: variable cruft") {
+		t.Errorf("output = %q, want an unused-variable warning", out)
+	}
+}
+
+func TestCheckCmdTemplatesDirDefaultsToCwd(t *testing.T) {
+	t.Setenv("JIG_TEMPLATES_DIR", "")
+	t.Chdir(fixtureTemplate(t))
+	if _, err := run(t, []string{"check", "--template", "python/std/lib"}, nil); err != nil {
+		t.Fatalf("check with default templates dir: %v", err)
+	}
+}
+
+func TestNewCmdTemplatesDirIsAFile(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := run(t, []string{"new", "python/std/tool", "--templates-dir", blocker}, nil)
+	if err == nil {
+		t.Fatal("want a scaffolding failure when the templates dir is a file")
+	}
+}
+
+func TestNewCmdTemplatesDirDefaultsToCwd(t *testing.T) {
+	t.Setenv("JIG_TEMPLATES_DIR", "")
+	t.Chdir(t.TempDir())
+	cmd := newNewCmd()
+	cmd.SetOut(&bytes.Buffer{})
+	if err := runNew(cmd, "", "python/std/tool"); err != nil {
+		t.Fatalf("runNew with default templates dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join("python", "std", "tool", "v1", jig.TemplateDirName, "jig.json")); err != nil {
+		t.Errorf("scaffold missing under cwd: %v", err)
+	}
+}
+
+func TestBumpCmdTemplateNotFound(t *testing.T) {
+	_, err := run(t, []string{"bump", "no/such/template", "--templates-dir", t.TempDir()}, nil)
+	if err == nil {
+		t.Fatal("want a bump error for a missing template")
+	}
+}
+
+func TestBumpCmdTemplatesDirDefaultsToCwd(t *testing.T) {
+	t.Setenv("JIG_TEMPLATES_DIR", "")
+	t.Chdir(fixtureTemplate(t))
+	out, err := run(t, []string{"bump", "python/std/lib"}, nil)
+	if err != nil {
+		t.Fatalf("bump with default templates dir: %v", err)
+	}
+	if !strings.Contains(out, "v2") {
+		t.Errorf("output = %q, want the new version dir", out)
+	}
+}
+
+// main is exercised through a helper process: its error path ends in
+// os.Exit(1), which only a subprocess can survive.
+func TestMainPrintsErrorAndExitsNonZero(t *testing.T) {
+	if os.Getenv("JIG_TEST_MAIN_HELPER") == "1" {
+		os.Args = []string{"jig", "bogus-command"}
+		main()
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestMainPrintsErrorAndExitsNonZero")
+	cmd.Env = append(os.Environ(), "JIG_TEST_MAIN_HELPER=1")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 1 {
+		t.Fatalf("exit = %v, want exit code 1", err)
+	}
+	if !strings.Contains(stderr.String(), "Error:") {
+		t.Errorf("stderr = %q, want the printed error", stderr.String())
 	}
 }

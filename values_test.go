@@ -1,6 +1,8 @@
 package jig
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -244,5 +246,44 @@ func TestStdinPrompterRepromptsOnPatternMismatch(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `value "Bad_Name" does not match pattern`) {
 		t.Fatalf("the invalid answer should be rejected inline, got %q", out.String())
+	}
+}
+
+func TestResolveValuesVarsFileError(t *testing.T) {
+	_, err := ResolveValues(testManifest(t), filepath.Join(t.TempDir(), "missing.json"), nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "reading") {
+		t.Fatalf("error = %v, want a vars-file read error", err)
+	}
+}
+
+func TestResolveValuesKeepsUndeclaredOverride(t *testing.T) {
+	// an override for an undeclared variable is passed through for
+	// Validate to report — it must reach the values map
+	values, err := ResolveValues(testManifest(t), "", []string{"NOPE=x"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["NOPE"] != "x" {
+		t.Errorf("undeclared override lost: %v", values)
+	}
+}
+
+func TestResolveValuesPromptError(t *testing.T) {
+	prompt := func(m *Manifest, values map[string]string, locked map[string]bool) error {
+		return errors.New("prompt blew up")
+	}
+	_, err := ResolveValues(testManifest(t), "", nil, prompt)
+	if err == nil || !strings.Contains(err.Error(), "prompt blew up") {
+		t.Fatalf("error = %v, want the prompt error", err)
+	}
+}
+
+func TestStdinPrompterEOFFails(t *testing.T) {
+	// a closed stdin mid-prompt is an error, not a silent default
+	prompt := StdinPrompter(strings.NewReader(""), &bytes.Buffer{})
+	values := map[string]string{"PROJECT_NAME": "my-project", "author": "someone"}
+	err := prompt(testManifest(t), values, nil)
+	if err == nil || !strings.Contains(err.Error(), "reading answer") {
+		t.Fatalf("error = %v, want a read error", err)
 	}
 }

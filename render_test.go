@@ -501,3 +501,100 @@ func TestRenderWorkflowFile(t *testing.T) {
 		t.Errorf("ci.yml = %q, want %q", data, want)
 	}
 }
+
+func TestRenderManifestErrors(t *testing.T) {
+	// a missing manifest fails before any planning
+	versionDir := writeTemplate(t, map[string]string{
+		"file.txt": "x\n",
+	})
+	if _, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{}); err == nil {
+		t.Error("want a manifest read error")
+	}
+	// an unparseable manifest fails before any planning
+	versionDir = writeTemplate(t, map[string]string{
+		"jig.json": "not json",
+	})
+	if _, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{}); err == nil {
+		t.Error("want a manifest parse error")
+	}
+	// values failing manifest validation fail before any planning
+	versionDir = writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+	})
+	if _, err := Render(versionDir, t.TempDir(), map[string]string{}, Options{}); err == nil {
+		t.Error("want a validation error")
+	}
+}
+
+func TestRenderRefusesWriteThroughFileComponent(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":     validManifest,
+		"sub/file.txt": "x\n",
+	})
+	out := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(out, "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// "sub" exists as a regular file: stating anything beneath it fails
+	// with ENOTDIR, which must surface, not be mistaken for absence
+	if err := os.WriteFile(filepath.Join(out, "demo", "sub"), []byte("blocker\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Force: true})
+	if err == nil || !strings.Contains(err.Error(), "checking") {
+		t.Fatalf("error = %v, want a destination-chain failure", err)
+	}
+}
+
+func TestRenderBadNameSyntax(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+		"{{.txt":   "x\n",
+	})
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "name") {
+		t.Fatalf("error = %v, want a name parse error", err)
+	}
+}
+
+func TestRenderLongTextFile(t *testing.T) {
+	// longer than the binary-sniff window: the content must still render
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":  validManifest,
+		"long.txt":  strings.Repeat("# {{.PROJECT_NAME}}\n", 100),
+		"short.txt": "{{.PROJECT_NAME}}\n",
+	})
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(res.OutputDir, "long.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Repeat("# demo\n", 100)
+	if string(data) != want {
+		t.Errorf("long.txt is %d bytes, want %d fully rendered", len(data), len(want))
+	}
+}
+
+func TestRenderForceSymlinkOverExistingFileFails(t *testing.T) {
+	versionDir := writeSymlinkTemplate(t, "real.txt")
+	out := t.TempDir()
+	// the link's destination exists as a regular file: recreating the link
+	// must fail rather than clobber it, even under --force
+	if err := os.MkdirAll(filepath.Join(out, "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(out, "demo", "link.txt"), []byte("keep\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Force: true, Trust: true})
+	if err == nil || !strings.Contains(err.Error(), "linking") {
+		t.Fatalf("error = %v, want a link failure", err)
+	}
+	data, _ := os.ReadFile(filepath.Join(out, "demo", "link.txt"))
+	if string(data) != "keep\n" {
+		t.Error("existing file was clobbered")
+	}
+}

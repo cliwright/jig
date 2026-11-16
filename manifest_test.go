@@ -245,3 +245,17 @@ func TestVerbatimEntriesMustBeBaseNames(t *testing.T) {
 		t.Fatalf("error = %v, want base-name refusal", err)
 	}
 }
+
+func TestLoadManifestReadError(t *testing.T) {
+	_, err := LoadManifest(filepath.Join(t.TempDir(), "missing.json"))
+	if err == nil || !strings.Contains(err.Error(), "reading") {
+		t.Fatalf("error = %v, want a read error", err)
+	}
+}
+
+func TestLoadManifestMalformedJSON(t *testing.T) {
+	_, err := LoadManifest(writeManifest(t, "not json"))
+	if err == nil || !strings.Contains(err.Error(), "parsing") {
+		t.Fatalf("error = %v, want a parse error", err)
+	}
+}

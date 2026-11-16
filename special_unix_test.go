@@ -94,3 +94,25 @@ func TestRenderForceRefusesSpecialDestFile(t *testing.T) {
 		t.Fatalf("error = %v, want not-a-regular-file refusal", err)
 	}
 }
+
+// A read-only output directory fails the write phase's first MkdirAll.
+// Unix-only: Windows ignores the read-only bit on directories, and root
+// bypasses permission checks entirely.
+func TestRenderRefusesUnwritableOutputDir(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permissions")
+	}
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":     validManifest,
+		"sub/file.txt": "x\n",
+	})
+	out := t.TempDir()
+	if err := os.Chmod(out, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(out, 0o755) })
+	_, err := Render(versionDir, filepath.Join(out, "projects"), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "creating") {
+		t.Fatalf("error = %v, want a directory-creation failure", err)
+	}
+}
