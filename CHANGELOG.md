@@ -9,6 +9,8 @@ Releases before 0.4.1 predate this changelog.
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-16
+
 ### Added
 
 - ADR 18 records the strings-only decision: no list or typed variables,
@@ -21,6 +23,13 @@ Releases before 0.4.1 predate this changelog.
   renders now work in CI runners, cron jobs and agent shells that present
   `/dev/null` as stdin, and value-less runs fail fast with an actionable
   error instead of dying on a prompt EOF.
+- The test suite now runs green on Windows: one render test used a `|` in
+  a templated file *name* — illegal on Windows filesystems, so the fixture
+  could not even be created — and a force-render test asserted unix
+  permission bits Windows does not have. No behavior change; the docs
+  gained a "File names on Windows" section recommending the function-call
+  form (`{{slugify .PROJECT_NAME}}`) over the piped form in skeleton file
+  and directory names.
 
 ### Changed
 
