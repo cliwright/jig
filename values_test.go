@@ -205,3 +205,44 @@ func TestStdinPrompterPromptsInDependencyOrder(t *testing.T) {
 		t.Fatalf("prompt should show the transitively re-derived default, got %q", out.String())
 	}
 }
+
+// An answer failing its choices is rejected and re-prompted immediately;
+// the next valid answer proceeds.
+func TestStdinPrompterRepromptsOnInvalidChoice(t *testing.T) {
+	m := manifestFromJSON(t, `{"version": 1, "variables": {
+		"PROJECT_NAME": {"default": "demo"},
+		"license": {"default": "MIT", "choices": ["MIT", "Apache-2.0"]}
+	}}`)
+	var out strings.Builder
+	values, err := ResolveValues(m, "", nil, StdinPrompter(strings.NewReader("\nGPL\nApache-2.0\n"), &out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["license"] != "Apache-2.0" {
+		t.Fatalf("the valid retry should win, got %q", values["license"])
+	}
+	if !strings.Contains(out.String(), `value "GPL" is not one of its choices`) {
+		t.Fatalf("the invalid answer should be rejected inline, got %q", out.String())
+	}
+	if strings.Count(out.String(), "license (MIT | Apache-2.0)") != 2 {
+		t.Fatalf("the variable should be re-prompted after a bad answer, got %q", out.String())
+	}
+}
+
+// Same for patterns: a mismatch is rejected inline, not at render time.
+func TestStdinPrompterRepromptsOnPatternMismatch(t *testing.T) {
+	m := manifestFromJSON(t, `{"version": 1, "variables": {
+		"PROJECT_NAME": {"default": "demo", "pattern": "^[a-z][a-z0-9-]*$"}
+	}}`)
+	var out strings.Builder
+	values, err := ResolveValues(m, "", nil, StdinPrompter(strings.NewReader("Bad_Name\ngood-name\n"), &out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["PROJECT_NAME"] != "good-name" {
+		t.Fatalf("the valid retry should win, got %q", values["PROJECT_NAME"])
+	}
+	if !strings.Contains(out.String(), `value "Bad_Name" does not match pattern`) {
+		t.Fatalf("the invalid answer should be rejected inline, got %q", out.String())
+	}
+}

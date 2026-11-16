@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/cliwright/jig"
 )
@@ -73,11 +74,13 @@ func runRender(cmd *cobra.Command, templateArg, output string, version int, temp
 
 	var prompt jig.Prompter
 	if varsFile == "" {
+		// A real terminal check, not a character-device check: /dev/null is
+		// a character device but not a terminal, and CI runners, cron and
+		// agent shells often present it as stdin. Non-*os.File readers (test
+		// doubles) count as interactive.
 		interactive := true
 		if f, ok := cmd.InOrStdin().(*os.File); ok {
-			if st, err := f.Stat(); err == nil && st.Mode()&os.ModeCharDevice == 0 {
-				interactive = false
-			}
+			interactive = term.IsTerminal(int(f.Fd()))
 		}
 		if !interactive && len(varFlags) == 0 {
 			return fmt.Errorf("stdin is not interactive: provide values with --vars-file or --var")

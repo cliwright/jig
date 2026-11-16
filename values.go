@@ -18,10 +18,12 @@ import (
 type Prompter func(m *Manifest, values map[string]string, locked map[string]bool) error
 
 // StdinPrompter returns a Prompter asking for each variable in dependency
-// order on in/out; an empty answer keeps the current value. Answering a
-// variable re-derives the defaults of everything derived from it before
-// those dependents are prompted, so a changed PROJECT_NAME shows fresh
-// derived defaults downstream instead of stale ones.
+// order on in/out; an empty answer keeps the current value. An answer that
+// fails its pattern or choices is rejected and re-prompted immediately,
+// not saved up for a render failure at the end. Answering a variable
+// re-derives the defaults of everything derived from it before those
+// dependents are prompted, so a changed PROJECT_NAME shows fresh derived
+// defaults downstream instead of stale ones.
 func StdinPrompter(in io.Reader, out io.Writer) Prompter {
 	return func(m *Manifest, values map[string]string, locked map[string]bool) error {
 		reader := bufio.NewReader(in)
@@ -38,18 +40,25 @@ func StdinPrompter(in io.Reader, out io.Writer) Prompter {
 			if len(v.Choices) > 0 {
 				label = fmt.Sprintf("%s (%s)", label, strings.Join(v.Choices, " | "))
 			}
-			fmt.Fprintf(out, "%s [%s]: ", label, values[name])
-			answer, err := reader.ReadString('\n')
-			if err != nil {
-				return fmt.Errorf("reading answer for %s: %w", name, err)
-			}
-			if answer = strings.TrimSpace(answer); answer == "" {
-				continue
-			}
-			values[name] = answer
-			skip[name] = true // an explicit answer wins over re-derivation
-			if err := m.rederive(values, name, skip); err != nil {
-				return err
+			for {
+				fmt.Fprintf(out, "%s [%s]: ", label, values[name])
+				answer, err := reader.ReadString('\n')
+				if err != nil {
+					return fmt.Errorf("reading answer for %s: %w", name, err)
+				}
+				if answer = strings.TrimSpace(answer); answer == "" {
+					break
+				}
+				if err := m.validateVar(name, answer); err != nil {
+					fmt.Fprintf(out, "%s\n", err)
+					continue
+				}
+				values[name] = answer
+				skip[name] = true // an explicit answer wins over re-derivation
+				if err := m.rederive(values, name, skip); err != nil {
+					return err
+				}
+				break
 			}
 		}
 		return nil

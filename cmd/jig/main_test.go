@@ -59,6 +59,41 @@ func pipeStdin(t *testing.T) *os.File {
 	return r
 }
 
+// devNullStdin returns os.DevNull as stdin — a character device but not a
+// terminal, which is what some CI runners, cron jobs and agent shells
+// present.
+func devNullStdin(t *testing.T) *os.File {
+	t.Helper()
+	f, err := os.OpenFile(os.DevNull, os.O_RDONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.Close() })
+	return f
+}
+
+// /dev/null is a character device but not a terminal: it must count as
+// non-interactive — failing fast without values, rendering with --var —
+// instead of prompting into an EOF error.
+func TestRenderCmdDevNullStdinIsNonInteractive(t *testing.T) {
+	templatesDir := fixtureTemplate(t)
+	_, err := run(t, []string{"render", "--template", "python/std/lib",
+		"--templates-dir", templatesDir, "--output", t.TempDir()}, devNullStdin(t))
+	if err == nil || !strings.Contains(err.Error(), "not interactive") {
+		t.Fatalf("error = %v, want non-interactive refusal", err)
+	}
+	out := t.TempDir()
+	_, err = run(t, []string{"render", "--template", "python/std/lib",
+		"--templates-dir", templatesDir, "--output", out,
+		"--var", "PROJECT_NAME=widget"}, devNullStdin(t))
+	if err != nil {
+		t.Fatalf("render with --var on /dev/null stdin: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "widget", "file.txt")); err != nil {
+		t.Errorf("rendered file missing: %v", err)
+	}
+}
+
 func TestRenderCmdRefusesNonInteractiveStdin(t *testing.T) {
 	templatesDir := fixtureTemplate(t)
 	_, err := run(t, []string{"render", "--template", "python/std/lib",

@@ -31,12 +31,15 @@ interactive answers. An override re-derives any default built on it, so
 
 Prompting requires an interactive terminal. `--vars-file` renders
 non-interactively; so does `--var` when stdin is not a terminal (remaining
-variables take their resolved defaults). With piped or absent stdin and no
-values at all, `render` fails fast instead of hanging on a prompt nobody
-can answer. Interactive prompts run in dependency order: answering a
-variable re-derives the defaults of everything derived from it before those
-dependents are prompted, while values supplied via `--vars-file`/`--var`
-stay locked.
+variables take their resolved defaults). "Not a terminal" includes
+`/dev/null` — a common stdin for CI runners, cron jobs and agent shells.
+With non-interactive stdin and no values at all, `render` fails fast
+instead of hanging on a prompt nobody can answer. Interactive prompts run
+in dependency order: answering a variable re-derives the defaults of
+everything derived from it before those dependents are prompted, while
+values supplied via `--vars-file`/`--var` stay locked. Answers are
+validated as they're given — a value failing its pattern or choices is
+rejected and re-prompted immediately.
 
 Rendering never overwrites an existing file unless `--force` is given.
 Rendering into a populated directory is fine as long as no file collides —

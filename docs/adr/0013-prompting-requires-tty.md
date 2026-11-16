@@ -14,7 +14,14 @@ answer.
 `--vars-file` renders non-interactively; so does `--var` when stdin is not
 a terminal (remaining variables take their resolved defaults).
 Non-interactive stdin with no values at all is a hard error naming
-`--vars-file`/`--var`.
+`--vars-file`/`--var`. Interactive answers are validated as they are
+given — a value failing its pattern or choices is rejected and re-prompted
+immediately, not saved up for a failure at the end of the prompt run.
+
+Terminal detection is a real terminal check (`term.IsTerminal`), not a
+character-device check: `/dev/null` is a character device but not a
+terminal, and CI runners, cron jobs and agent shells often present it as
+stdin. It counts as non-interactive.
 
 ## Consequences
 

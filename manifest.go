@@ -171,24 +171,34 @@ func (m *Manifest) parseDefaults() error {
 }
 
 // Validate checks values against the manifest: every supplied variable must
-// be declared, and every value must match its validation pattern (when the
-// variable declares one). Names are checked in sorted order so the first
-// error is deterministic.
+// be declared, and every value must match its validation pattern or choices
+// (when the variable declares one). Names are checked in sorted order so
+// the first error is deterministic.
 func (m *Manifest) Validate(values map[string]string) error {
 	for _, name := range sortedKeys(values) {
 		if _, ok := m.Variables[name]; !ok {
 			return fmt.Errorf("undeclared variable %q (declared: %v)", name, m.Names())
 		}
 	}
-	for name, re := range m.patterns {
-		if !re.MatchString(values[name]) {
-			return fmt.Errorf("variable %s: value %q does not match pattern %q", name, values[name], m.Variables[name].Pattern)
+	for _, name := range sortedKeys(m.Variables) {
+		if err := m.validateVar(name, values[name]); err != nil {
+			return err
 		}
 	}
-	for _, name := range sortedKeys(m.Variables) {
-		if v := m.Variables[name]; len(v.Choices) > 0 && !slices.Contains(v.Choices, values[name]) {
-			return fmt.Errorf("variable %s: value %q is not one of its choices %v", name, values[name], v.Choices)
-		}
+	return nil
+}
+
+// validateVar checks one value against its variable's declared pattern or
+// choices. Validate calls it for every variable; the interactive prompter
+// calls it per answer, so a bad answer is rejected — and re-prompted —
+// immediately instead of failing the whole render at the end.
+func (m *Manifest) validateVar(name, value string) error {
+	v := m.Variables[name]
+	if re := m.patterns[name]; re != nil && !re.MatchString(value) {
+		return fmt.Errorf("variable %s: value %q does not match pattern %q", name, value, v.Pattern)
+	}
+	if len(v.Choices) > 0 && !slices.Contains(v.Choices, value) {
+		return fmt.Errorf("variable %s: value %q is not one of its choices %v", name, value, v.Choices)
 	}
 	return nil
 }

@@ -9,6 +9,20 @@ Releases before 0.4.1 predate this changelog.
 
 ## [Unreleased]
 
+### Fixed
+
+- `render` no longer mistakes `/dev/null` stdin for an interactive
+  terminal — it is a character device but not a terminal. `--var`-only
+  renders now work in CI runners, cron jobs and agent shells that present
+  `/dev/null` as stdin, and value-less runs fail fast with an actionable
+  error instead of dying on a prompt EOF.
+
+### Changed
+
+- Interactive answers are validated as they are given: a value failing its
+  pattern or choices is rejected and re-prompted immediately, instead of
+  failing the whole render after the last prompt.
+
 ## [0.4.2] - 2026-11-16
 
 ### Added
