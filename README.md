@@ -43,6 +43,9 @@ jig render --template python/std/lib --templates-dir ./templates --output ./libs
 ```
 
 Set `JIG_TEMPLATES_DIR` once and drop `--templates-dir` from every command.
+Want ready-made templates instead of authoring your own? Clone
+[cliwright/jig-templates](https://github.com/cliwright/jig-templates) and
+point `JIG_TEMPLATES_DIR` at it.
 
 ## For agents
 

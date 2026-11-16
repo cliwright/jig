@@ -9,6 +9,15 @@ Releases before 0.4.1 predate this changelog.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-16
+
+### Added
+
+- The docs and README now link the public
+  [cliwright/jig-templates](https://github.com/cliwright/jig-templates)
+  registry, with clone-and-render examples.
+- `jig agents` now points agents at the public registry.
+
 ## [0.4.1] - 2026-11-15
 
 ### Added

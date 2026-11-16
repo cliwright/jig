@@ -130,11 +130,14 @@ directory.
 jig never fetches: clone a template repo yourself and point the templates
 root at it. The trust decision stays with you, in your own git setup.
 
+[cliwright/jig-templates](https://github.com/cliwright/jig-templates) is the
+public registry of ready-made templates:
+
 ```sh
-git clone https://github.com/example/jig-templates ~/jig-templates
+git clone https://github.com/cliwright/jig-templates ~/jig-templates
 export JIG_TEMPLATES_DIR="$HOME/jig-templates"
-git -C "$JIG_TEMPLATES_DIR" checkout v1.2.0   # optional: pin a version
-jig render --template python/std/lib --output ./libs
+git -C "$JIG_TEMPLATES_DIR" checkout v1.0.0   # optional: pin a version
+jig render --template python/astral-pytest-zensical/lib --output ./libs
 ```
 
 Update later with `git pull`. Repos that don't follow the

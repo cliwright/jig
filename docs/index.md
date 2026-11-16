@@ -92,6 +92,17 @@ inherit, `jig bump python/std/lib` copies `v1` to `v2` as the starting
 point for the new version — old versions stay renderable with
 `--version 1`.
 
+## Ready-made templates
+
+[cliwright/jig-templates](https://github.com/cliwright/jig-templates) is the
+public template registry — clone it, point jig at it, render:
+
+```sh
+git clone https://github.com/cliwright/jig-templates ~/jig-templates
+export JIG_TEMPLATES_DIR="$HOME/jig-templates"
+jig render --template python/astral-pytest-zensical/tool --output .
+```
+
 ## Agent support
 
 jig is built to be driven by AI agents, not just humans:

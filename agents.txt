@@ -17,6 +17,16 @@ special files (FIFOs, devices, sockets) are rejected outright — this
 includes verbatim directories. Rendering a template you did not write is
 safe at render time.
 
+Where templates come from
+-------------------------
+jig never fetches templates: clone a repo and point --templates-dir (or
+JIG_TEMPLATES_DIR) at it. A public registry of ready-made templates lives
+at https://github.com/cliwright/jig-templates:
+
+    git clone https://github.com/cliwright/jig-templates ~/jig-templates
+    jig render --template python/astral-pytest-zensical/tool \
+        --templates-dir ~/jig-templates --output .
+
 Running jig non-interactively
 -----------------------------
 You are almost certainly not on a TTY, and prompting requires one. Always
