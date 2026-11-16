@@ -27,3 +27,4 @@ one, never an edit.
 
 - [5. No `.env` support](0005-no-dotenv.md)
 - [15. No remote fetching, not even via git wrappers](0015-no-remote-fetching.md)
+- [18. String values only (no lists, no typed variables)](0018-strings-only.md)

@@ -4,6 +4,10 @@
   </a>
 </p>
 
+[![CI](https://github.com/cliwright/jig/actions/workflows/ci.yml/badge.svg)](https://github.com/cliwright/jig/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/cliwright/jig/graph/badge.svg)](https://codecov.io/gh/cliwright/jig)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cliwright/jig.svg)](https://pkg.go.dev/github.com/cliwright/jig)
+
 Render project templates — no hooks, no template-supplied code execution,
 templates are data.
 A template is a directory of project files plus a `jig.json` manifest
