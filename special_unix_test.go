@@ -27,6 +27,41 @@ func TestRenderRejectsNonRegularFiles(t *testing.T) {
 	}
 }
 
+// Windows has no executable bit — Go reports every file as 0666 and Chmod
+// only honors the read-only attribute — so mode restoration is unobservable
+// there and this test is unix-only.
+func TestRenderForceRestoresTemplateMode(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+	})
+	script := filepath.Join(versionDir, TemplateDirName, "run.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	values := map[string]string{"PROJECT_NAME": "demo", "author": "x"}
+	res, err := Render(versionDir, out, values, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// destination loses the executable bit, then a force render must
+	// restore the template's mode
+	dst := filepath.Join(res.OutputDir, "run.sh")
+	if err := os.Chmod(dst, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Render(versionDir, out, values, Options{Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Errorf("mode = %o, want 755 after force render", info.Mode().Perm())
+	}
+}
+
 func TestBumpRefusesNonRegularFiles(t *testing.T) {
 	templatesDir := t.TempDir()
 	skel := filepath.Join(templatesDir, "x", "y", "z", "v1", TemplateDirName)

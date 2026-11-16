@@ -3,6 +3,7 @@ package jig
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -25,10 +26,16 @@ func writeTemplate(t *testing.T, files map[string]string) string {
 }
 
 func TestRender(t *testing.T) {
+	// "|" is illegal in Windows file names, so the piped form cannot exist
+	// in a fixture there; the function-call form renders the same name.
+	slugged := "src/{{.PROJECT_NAME | slugify}}.txt"
+	if runtime.GOOS == "windows" {
+		slugged = "src/{{slugify .PROJECT_NAME}}.txt"
+	}
 	versionDir := writeTemplate(t, map[string]string{
-		"jig.json":                            validManifest,
-		"README.md":                           "# {{.PROJECT_NAME}} by {{.author}}\n",
-		"src/{{.PROJECT_NAME | slugify}}.txt": "pkg {{.PROJECT_NAME}}\n",
+		"jig.json":  validManifest,
+		"README.md": "# {{.PROJECT_NAME}} by {{.author}}\n",
+		slugged:     "pkg {{.PROJECT_NAME}}\n",
 	})
 	out := filepath.Join(t.TempDir(), "out")
 	res, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "my-demo", "author": "x"}, Options{})
@@ -419,38 +426,6 @@ func TestRenderContentErrorLeavesNoPartialTree(t *testing.T) {
 	entries, _ := os.ReadDir(out)
 	if len(entries) != 0 {
 		t.Errorf("partial tree left behind: %v", entries)
-	}
-}
-
-func TestRenderForceRestoresTemplateMode(t *testing.T) {
-	versionDir := writeTemplate(t, map[string]string{
-		"jig.json": validManifest,
-	})
-	script := filepath.Join(versionDir, TemplateDirName, "run.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	out := t.TempDir()
-	values := map[string]string{"PROJECT_NAME": "demo", "author": "x"}
-	res, err := Render(versionDir, out, values, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// destination loses the executable bit, then a force render must
-	// restore the template's mode
-	dst := filepath.Join(res.OutputDir, "run.sh")
-	if err := os.Chmod(dst, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Render(versionDir, out, values, Options{Force: true}); err != nil {
-		t.Fatal(err)
-	}
-	info, err := os.Stat(dst)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o755 {
-		t.Errorf("mode = %o, want 755 after force render", info.Mode().Perm())
 	}
 }
 

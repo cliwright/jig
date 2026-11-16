@@ -72,7 +72,9 @@ jig new python/std/lib --templates-dir ./templates
 
 This creates `templates/python/std/lib/v1/{{.PROJECT_NAME}}/` with a starter
 `jig.json` and README. Edit the skeleton. Any file or directory name may
-contain `{{.PROJECT_NAME}}` or another declared variable. Once you are finished authoring 
+contain `{{.PROJECT_NAME}}` or another declared variable (mind
+[Windows-illegal characters in names](implementation.md#file-names-on-windows)).
+Once you are finished authoring 
 the template, validate and render:
 
 ```sh

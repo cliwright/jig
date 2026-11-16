@@ -21,6 +21,28 @@ Rendering is strict: referencing a variable the manifest does not declare
 fails the render. The manifest is the whole contract — see
 [the manifest reference](manifest.md).
 
+## File names on Windows
+
+Windows forbids `< > : " / \ | ? *` in file and directory names. That
+matters for template **names**, not contents: a skeleton file named
+
+```
+src/{{.PROJECT_NAME | slugify}}.txt
+```
+
+renders fine on Linux and macOS but cannot even be checked out on Windows
+— the `|` is illegal on disk before any rendering happens. In names,
+prefer the function-call form, which avoids the pipe and renders to
+exactly the same result:
+
+```
+src/{{slugify .PROJECT_NAME}}.txt
+```
+
+File and directory *contents* are unaffected — pipelines inside a file
+work on every platform, since the content is rendered in memory and only
+the result touches disk.
+
 ## String helpers
 
 On top of the standard library, jig maps a deliberately tiny set of string
