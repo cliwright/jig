@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -67,7 +66,7 @@ func runRender(cmd *cobra.Command, templateArg, output string, version int, temp
 	if err != nil {
 		return err
 	}
-	m, err := jig.LoadManifest(filepath.Join(dir, jig.TemplateDirName, jig.ManifestFileName))
+	m, err := jig.LoadSkeletonManifest(dir, trust)
 	if err != nil {
 		return err
 	}

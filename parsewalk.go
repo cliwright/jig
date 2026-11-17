@@ -1,6 +1,20 @@
 package jig
 
-import "text/template/parse"
+import (
+	"text/template"
+	"text/template/parse"
+)
+
+// collectUsedAll records variable references across every template
+// associated with t — the root tree and every {{define}} — so a broken
+// named template is caught even when no executed branch invokes it.
+func collectUsedAll(t *template.Template, used map[string]bool) {
+	for _, tt := range t.Templates() {
+		if tt.Tree != nil {
+			collectUsed(tt.Tree.Root, used)
+		}
+	}
+}
 
 // collectUsed walks a parsed template tree recording the names of every
 // variable reference ({{.Name}}) in used, driving the unused-variable

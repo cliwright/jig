@@ -49,3 +49,26 @@ brews:
 
 checksum:
   name_template: 'checksums.txt'
+
+# SPDX SBOM per archive (syft). Installed by the release workflow.
+sboms:
+  - id: archives
+    artifacts: archive
+
+# Keyless cosign signature over the checksums: the signer identity is the
+# release workflow's GitHub OIDC token, so there is no key to manage and
+# the signature itself attests the CI provenance. Verify with:
+#   cosign verify-blob --bundle checksums.txt.sigstore.json \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     --certificate-identity-regexp 'https://github.com/cliwright/' \
+#     checksums.txt
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - --bundle
+      - ${signature}
+      - --yes
+      - ${artifact}
+    artifacts: checksum

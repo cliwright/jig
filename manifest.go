@@ -127,7 +127,7 @@ func (m *Manifest) parseDefaults() error {
 		}
 		m.defaults[name] = t
 		deps := map[string]bool{}
-		collectUsed(t.Tree.Root, deps)
+		collectUsedAll(t, deps)
 		for dep := range deps {
 			if dep == name {
 				return fmt.Errorf("variable %s: default references itself", name)

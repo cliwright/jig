@@ -116,3 +116,22 @@ func TestRenderRefusesUnwritableOutputDir(t *testing.T) {
 		t.Fatalf("error = %v, want a directory-creation failure", err)
 	}
 }
+
+// A FIFO as the manifest would block the read forever; non-regular
+// manifests are refused, like every other special file in a template.
+func TestRenderRejectsNonRegularManifest(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"file.txt": "x\n",
+	})
+	if err := syscall.Mkfifo(filepath.Join(versionDir, TemplateDirName, "jig.json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	values := map[string]string{"PROJECT_NAME": "demo", "author": "x"}
+	_, err := Render(versionDir, t.TempDir(), values, Options{})
+	if err == nil || !strings.Contains(err.Error(), "non-regular") {
+		t.Fatalf("Render error = %v, want a non-regular refusal", err)
+	}
+	if _, err := Check(versionDir); err == nil || !strings.Contains(err.Error(), "non-regular") {
+		t.Fatalf("Check error = %v, want a non-regular refusal", err)
+	}
+}

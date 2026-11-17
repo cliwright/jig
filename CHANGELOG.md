@@ -9,8 +9,34 @@ Releases before 0.4.1 predate this changelog.
 
 ## [Unreleased]
 
+### Added
+
+- Releases now ship provenance: an SPDX SBOM per archive (syft) and a
+  keyless cosign signature over `checksums.txt`
+  (`checksums.txt.sigstore.json`), signed with the release workflow's
+  GitHub OIDC identity — no keys to distribute. Verification instructions
+  are in the README.
+- New exported `LoadSkeletonManifest(versionDir, trust)`: loads a
+  template's manifest after vetting it like any other template file. The
+  CLI's prompt-time manifest load uses it too.
+
 ### Fixed
 
+- `jig check` (and the renderer's unused-variable tracking) now traverses
+  `{{define}}`d named templates, not just the root parse tree: an
+  undeclared variable inside a named template fails check even when no
+  executed branch invokes it. ADR 11's "every branch of every template"
+  promise now holds.
+- The manifest is vetted before it is read: a symlinked `jig.json` is
+  refused under the default policy (`--trust` allows a relative link
+  resolving inside the template tree, as for any other file), and a
+  non-regular manifest is refused — a FIFO previously blocked the read
+  forever.
+- A manifest-only template now creates its output directory; Render
+  previously reported an `OutputDir` that never existed.
+- The Windows `--force` overwrite fallback no longer risks losing the
+  original file: the existing destination is moved aside and restored if
+  the retry rename fails, instead of being deleted first.
 - A destination path with a regular file as an intermediate component is
   now refused explicitly and identically on every platform
   (`destination ... contains non-directory ...`). On Windows the write

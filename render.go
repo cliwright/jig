@@ -97,9 +97,35 @@ func ResolveTemplate(templatesDir, name string, version int) (string, error) {
 // create directories and files — a template error never leaves a partial
 // tree. (Disk failures mid-write and concurrent filesystem changes remain
 // outside the guarantee.)
+// LoadSkeletonManifest loads the manifest of the template in versionDir
+// after vetting it the way the render walk vets every other template file:
+// the default policy refuses a symlinked manifest outright, a trusted link
+// must be relative and resolve inside the template tree, and a non-regular
+// manifest (a FIFO would block the read forever) is refused.
+func LoadSkeletonManifest(versionDir string, trust bool) (*Manifest, error) {
+	skel := filepath.Join(versionDir, TemplateDirName)
+	path := filepath.Join(skel, ManifestFileName)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		if _, err := checkSymlink(skel, path, trust); err != nil {
+			return nil, err
+		}
+		if info, err = os.Stat(path); err != nil {
+			return nil, fmt.Errorf("reading %s: %w", path, err)
+		}
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("template contains non-regular manifest %s: only regular files are allowed", path)
+	}
+	return LoadManifest(path)
+}
+
 func Render(versionDir, outputDir string, values map[string]string, opts Options) (*Result, error) {
 	skel := filepath.Join(versionDir, TemplateDirName)
-	m, err := LoadManifest(filepath.Join(skel, ManifestFileName))
+	m, err := LoadSkeletonManifest(versionDir, opts.Trust)
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +171,12 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 		}
 	}
 
+	// The project root itself is not in plan.dirs — the walk covers the
+	// skeleton's children — so create it explicitly: even a manifest-only
+	// template leaves its output directory behind.
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return nil, fmt.Errorf("creating %s: %w", dest, err)
+	}
 	for _, d := range plan.dirs {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return nil, fmt.Errorf("creating %s: %w", d, err)
@@ -434,9 +466,18 @@ func writeFile(dst string, data []byte, mode fs.FileMode) error {
 		return fmt.Errorf("writing %s: %w", dst, err)
 	}
 	if err := os.Rename(tmpName, dst); err != nil {
-		// Windows cannot rename over an existing file: remove and retry.
-		os.Remove(dst)
+		// Windows cannot rename over an existing file: move the
+		// destination aside and retry, restoring it when the retry fails —
+		// removing it first would lose the original to a failed retry.
+		bak := dst + ".jig-bak"
+		os.Remove(bak)
+		if rerr := os.Rename(dst, bak); rerr != nil {
+			os.Remove(tmpName)
+			return fmt.Errorf("writing %s: %w", dst, err)
+		}
+		defer os.Remove(bak)
 		if err2 := os.Rename(tmpName, dst); err2 != nil {
+			os.Rename(bak, dst)
 			os.Remove(tmpName)
 			return fmt.Errorf("writing %s: %w", dst, err2)
 		}
@@ -453,7 +494,7 @@ func renderString(s string, values map[string]string, used map[string]bool) (str
 	if err != nil {
 		return "", err
 	}
-	collectUsed(t.Tree.Root, used)
+	collectUsedAll(t, used)
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, values); err != nil {
 		return "", err
@@ -476,7 +517,7 @@ func renderContent(src string, values map[string]string, used map[string]bool) (
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", src, err)
 	}
-	collectUsed(t.Tree.Root, used)
+	collectUsedAll(t, used)
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, values); err != nil {
 		return nil, fmt.Errorf("rendering %s: %w", src, err)

@@ -128,3 +128,18 @@ func TestCheckAllowsDeclaredVariablesInUntakenBranches(t *testing.T) {
 		t.Fatalf("Check: %v", err)
 	}
 }
+
+// A {{define}}d template's body must be traversed too: an undeclared
+// variable inside it fails check even when no executed branch invokes the
+// template and the defaults never reach it.
+func TestCheckRejectsUndeclaredVarInDefinedTemplate(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"WITH_TESTS": {"default": "no", "choices": ["yes", "no"]}}}`,
+		"file.txt": "{{define \"broken\"}}{{.TYPO}}{{end}}{{if eq .WITH_TESTS \"yes\"}}{{template \"broken\"}}{{end}}\n",
+	})
+	if _, err := Check(versionDir); err == nil || !strings.Contains(err.Error(), "undeclared variable TYPO") {
+		t.Fatalf("Check error = %v, want an undeclared-variable refusal", err)
+	}
+}

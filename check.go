@@ -26,7 +26,7 @@ type CheckResult struct {
 // template before it ships.
 func Check(versionDir string) (*CheckResult, error) {
 	skel := filepath.Join(versionDir, TemplateDirName)
-	m, err := LoadManifest(filepath.Join(skel, ManifestFileName))
+	m, err := LoadSkeletonManifest(versionDir, false)
 	if err != nil {
 		return nil, err
 	}

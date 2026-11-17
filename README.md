@@ -36,6 +36,21 @@ or with Go:
 go install github.com/cliwright/jig/cmd/jig@latest
 ```
 
+### Verifying a release
+
+Release binaries ship with an SPDX SBOM per archive (`*.sbom*`) and a
+keyless [cosign](https://docs.sigstore.dev/) signature over the checksums
+(`checksums.txt.sigstore.json`). The signer identity is the release
+workflow's GitHub OIDC token — no keys to distribute:
+
+```sh
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp 'https://github.com/cliwright/' \
+  checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+```
+
 ## Quickstart
 
 ```sh

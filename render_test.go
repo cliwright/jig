@@ -598,3 +598,87 @@ func TestRenderForceSymlinkOverExistingFileFails(t *testing.T) {
 		t.Error("existing file was clobbered")
 	}
 }
+
+func TestRenderRejectsSymlinkedManifest(t *testing.T) {
+	// the manifest is the template's most security-relevant file: the
+	// default no-symlink policy covers it too, for Render and Check
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+		"file.txt": "x\n",
+	})
+	outside := filepath.Join(t.TempDir(), "jig.json")
+	if err := os.WriteFile(outside, []byte(validManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(versionDir, TemplateDirName, "jig.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(versionDir, TemplateDirName, "jig.json")); err != nil {
+		t.Fatal(err)
+	}
+	values := map[string]string{"PROJECT_NAME": "demo", "author": "x"}
+	_, err := Render(versionDir, t.TempDir(), values, Options{})
+	if err == nil || !strings.Contains(err.Error(), "must not contain symlinks") {
+		t.Fatalf("Render error = %v, want a symlink refusal", err)
+	}
+	if _, err := Check(versionDir); err == nil || !strings.Contains(err.Error(), "must not contain symlinks") {
+		t.Fatalf("Check error = %v, want a symlink refusal", err)
+	}
+}
+
+func TestRenderTrustAllowsContainedSymlinkedManifest(t *testing.T) {
+	// under --trust, a relative manifest link resolving inside the
+	// template tree is as acceptable as any other contained link
+	versionDir := writeTemplate(t, map[string]string{
+		"file.txt": "x\n",
+	})
+	skel := filepath.Join(versionDir, TemplateDirName)
+	if err := os.WriteFile(filepath.Join(skel, "real.jig.json"), []byte(validManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("real.jig.json", filepath.Join(skel, "jig.json")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Trust: true})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(res.OutputDir, "file.txt")); err != nil {
+		t.Errorf("rendered file missing: %v", err)
+	}
+}
+
+func TestRenderTrustRejectsEscapingSymlinkedManifest(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"file.txt": "x\n",
+	})
+	outside := filepath.Join(t.TempDir(), "jig.json")
+	if err := os.WriteFile(outside, []byte(validManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(filepath.Join(versionDir, TemplateDirName), outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(rel, filepath.Join(versionDir, TemplateDirName, "jig.json")); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Trust: true})
+	if err == nil || !strings.Contains(err.Error(), "outside the template tree") {
+		t.Fatalf("error = %v, want an escape refusal", err)
+	}
+}
+
+func TestRenderManifestOnlyTemplateCreatesOutputDir(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+	})
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	info, err := os.Stat(res.OutputDir)
+	if err != nil || !info.IsDir() {
+		t.Errorf("OutputDir = %s, stat: %v — want a created directory", res.OutputDir, err)
+	}
+}
