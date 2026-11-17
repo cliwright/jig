@@ -9,6 +9,8 @@ Releases before 0.4.1 predate this changelog.
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-11-17
+
 ### Added
 
 - Releases now ship provenance: an SPDX SBOM per archive (syft) and a
