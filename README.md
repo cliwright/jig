@@ -40,13 +40,14 @@ go install github.com/cliwright/jig/cmd/jig@latest
 
 Release binaries ship with an SPDX SBOM per archive (`*.sbom*`) and a
 keyless [cosign](https://docs.sigstore.dev/) signature over the checksums
-(`checksums.txt.sigstore.json`). The signer identity is the release
-workflow's GitHub OIDC token — no keys to distribute:
+(`checksums.txt.sigstore.json`). The signer identity is this repository's
+own release workflow's GitHub OIDC token — publicly auditable, no keys to
+distribute:
 
 ```sh
 cosign verify-blob --bundle checksums.txt.sigstore.json \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp 'https://github.com/cliwright/' \
+  --certificate-identity-regexp 'https://github.com/cliwright/jig/' \
   checksums.txt
 sha256sum --check --ignore-missing checksums.txt
 ```

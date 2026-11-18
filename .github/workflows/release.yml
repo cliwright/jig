@@ -1,0 +1,43 @@
+# Release jig from THIS repository: goreleaser builds the binaries, syft
+# generates the SBOMs, cosign signs the checksums keylessly, and the
+# Homebrew tap is updated. Triggered by the v* tags the monorepo's mirror
+# workflow pushes here — running the release in the mirror keeps the whole
+# build (and the cosign signer identity below) publicly auditable.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # create the GitHub release
+  id-token: write # cosign keyless signing: the OIDC token IS the signer identity
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # goreleaser builds its changelog from git history
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # cosign signs the checksums keylessly; syft generates the SBOMs.
+      # goreleaser invokes both from PATH (see .goreleaser.yaml).
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Release
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --clean
+        env:
+          # Scoped to cliwright/jig (releases) and cliwright/homebrew-cliwright (the tap).
+          GITHUB_TOKEN: ${{ secrets.JIG_MIRROR_TOKEN }}
