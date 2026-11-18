@@ -83,20 +83,6 @@ func ResolveTemplate(templatesDir, name string, version int) (string, error) {
 	return dir, nil
 }
 
-// Render renders the template in versionDir into outputDir. The version
-// directory holds exactly one project skeleton under {{.PROJECT_NAME}}/
-// whose jig.json declares the variables; the rendered skeleton lands at
-// outputDir/<rendered name>. values must satisfy the manifest (see
-// Manifest.Validate): rendering is hard-fail on undeclared variables
-// (missingkey=error) and on pattern mismatches.
-//
-// Rendering is fully prepared before anything is written: every name and
-// every file's content is rendered in memory, destinations are checked for
-// internal collisions, containment, symlinked components, and (unless
-// Force) existing files. Only when all of that passes does the write phase
-// create directories and files — a template error never leaves a partial
-// tree. (Disk failures mid-write and concurrent filesystem changes remain
-// outside the guarantee.)
 // LoadSkeletonManifest loads the manifest of the template in versionDir
 // after vetting it the way the render walk vets every other template file:
 // the default policy refuses a symlinked manifest outright, a trusted link
@@ -123,6 +109,20 @@ func LoadSkeletonManifest(versionDir string, trust bool) (*Manifest, error) {
 	return LoadManifest(path)
 }
 
+// Render renders the template in versionDir into outputDir. The version
+// directory holds exactly one project skeleton under {{.PROJECT_NAME}}/
+// whose jig.json declares the variables; the rendered skeleton lands at
+// outputDir/<rendered name>. values must satisfy the manifest (see
+// Manifest.Validate): rendering is hard-fail on undeclared variables
+// (missingkey=error) and on pattern mismatches.
+//
+// Rendering is fully prepared before anything is written: every name and
+// every file's content is rendered in memory, destinations are checked for
+// internal collisions, containment, symlinked components, and (unless
+// Force) existing files. Only when all of that passes does the write phase
+// create directories and files — a template error never leaves a partial
+// tree. (Disk failures mid-write and concurrent filesystem changes remain
+// outside the guarantee.)
 func Render(versionDir, outputDir string, values map[string]string, opts Options) (*Result, error) {
 	skel := filepath.Join(versionDir, TemplateDirName)
 	m, err := LoadSkeletonManifest(versionDir, opts.Trust)
