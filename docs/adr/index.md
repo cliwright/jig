@@ -24,7 +24,10 @@ one, never an edit.
 - [17. Escaping foreign template syntax with `ldelim`/`rdelim`](0017-escaping-foreign-syntax.md)
 - [19. Conditional files and directories: empty-rendered names are excluded](0019-conditional-files.md)
 
-## Rejected
+## Rejected features (adopted as constraints)
+
+These ADRs reject a proposed *capability* — the ADR itself is an accepted
+decision, and the limitation is the point, not a discarded idea.
 
 - [5. No `.env` support](0005-no-dotenv.md)
 - [15. No remote fetching, not even via git wrappers](0015-no-remote-fetching.md)
