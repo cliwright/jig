@@ -238,14 +238,6 @@ func TestChoicesRejected(t *testing.T) {
 	}
 }
 
-func TestVerbatimEntriesMustBeBaseNames(t *testing.T) {
-	content := `{"version": 1, "variables": {"PROJECT_NAME": {"default": "d"}}, "verbatim": ["ci/shared"]}`
-	_, err := LoadManifest(writeManifest(t, content))
-	if err == nil || !strings.Contains(err.Error(), "base name") {
-		t.Fatalf("error = %v, want base-name refusal", err)
-	}
-}
-
 func TestLoadManifestReadError(t *testing.T) {
 	_, err := LoadManifest(filepath.Join(t.TempDir(), "missing.json"))
 	if err == nil || !strings.Contains(err.Error(), "reading") {
@@ -257,5 +249,20 @@ func TestLoadManifestMalformedJSON(t *testing.T) {
 	_, err := LoadManifest(writeManifest(t, "not json"))
 	if err == nil || !strings.Contains(err.Error(), "parsing") {
 		t.Fatalf("error = %v, want a parse error", err)
+	}
+}
+
+func TestLoadManifestVerbatimEntries(t *testing.T) {
+	manifest := `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}},
+		"verbatim": ["template", ".github/workflows/ci.yml", "docs/helm"]}`
+	if _, err := LoadManifest(writeManifest(t, manifest)); err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	for _, bad := range []string{".", "..", "../escape", "/abs", "a//b"} {
+		m := `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}},
+			"verbatim": ["` + bad + `"]}`
+		if _, err := LoadManifest(writeManifest(t, m)); err == nil {
+			t.Errorf("verbatim entry %q: want a load error", bad)
+		}
 	}
 }

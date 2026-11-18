@@ -35,7 +35,17 @@ itself never renders into the output as it is the template's own metadata.
 | --- | --- | --- |
 | `version` | yes | Manifest schema version; currently `1` |
 | `variables` | yes | Map of variable name to its declaration (below) |
-| `verbatim` | no | Directory names whose subtrees copy as-is, unrendered |
+| `verbatim` | no | Entries that copy as-is, unrendered (below) |
+
+`verbatim` accepts three forms:
+
+- a directory **base name** (`"template"`): the subtree is verbatim
+  wherever a directory of that name sits in the skeleton;
+- a directory's **root-relative path** (`"docs/helm"`): just that
+  directory's subtree;
+- a file's **root-relative path** (`".github/workflows/ci.yml"`): that
+  single file — the escape hatch for foreign-syntax files at the
+  skeleton root, which have no parent directory to list.
 
 ### `variables.<NAME>`
 
@@ -106,8 +116,8 @@ answering `PROJECT_NAME` differently also fixes `PKG`.
 - **Binary files** (images, archives, …) copy through unchanged. Detection
   is a content heuristic: a NUL byte in the first 512 bytes (the same
   heuristic git and net/http use). A file without one is treated as text
-  and rendered — if a file must never be parsed, put it in a `verbatim`
-  directory rather than relying on the heuristic.
+  and rendered — if a file must never be parsed, list it (or its
+  directory) in `verbatim` rather than relying on the heuristic.
 - **Executable bits** are preserved — exactly: written files are `Chmod`ed
   to the template's mode, so umask and pre-existing destination modes
   (`--force`) don't dilute them. Overwrites *replace* the destination

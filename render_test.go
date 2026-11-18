@@ -791,3 +791,35 @@ func TestRenderEmptyProjectNameStillRefused(t *testing.T) {
 		t.Fatalf("error = %v, want an empty-name refusal", err)
 	}
 }
+
+func TestRenderVerbatimSingleFilesAndPaths(t *testing.T) {
+	// foreign-syntax content (${{ }} parses as Go template actions and
+	// undeclared variables) must pass through byte-identical — including
+	// at the skeleton root, which has no parent directory to list
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}},
+			"verbatim": ["renovate.json", ".github/workflows/ci.yml", "docs/helm"]}`,
+		"renovate.json":            "branch: ${{ x }}\n",
+		".github/workflows/ci.yml": "on: [${{ github }}]\n",
+		"docs/helm/chart.yaml":     "name: ${{ helm }}\n",
+		"README.md":                "# {{.PROJECT_NAME}}\n",
+	})
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	for rel, want := range map[string]string{
+		"renovate.json":            "branch: ${{ x }}\n",
+		".github/workflows/ci.yml": "on: [${{ github }}]\n",
+		"docs/helm/chart.yaml":     "name: ${{ helm }}\n",
+	} {
+		data, err := os.ReadFile(filepath.Join(res.OutputDir, filepath.FromSlash(rel)))
+		if err != nil || string(data) != want {
+			t.Errorf("%s = %q, %v — want verbatim %q", rel, data, err, want)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(res.OutputDir, "README.md"))
+	if err != nil || string(data) != "# demo\n" {
+		t.Errorf("README.md = %q, %v — want rendered", data, err)
+	}
+}

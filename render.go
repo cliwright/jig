@@ -444,13 +444,19 @@ func containedPath(base, name string) (string, error) {
 	return out, nil
 }
 
-// isVerbatim reports whether rel (slash form) lives beneath a directory
-// whose base name is listed in verbatim. The matched directory's own path
-// still renders — only its contents ship unrendered.
+// isVerbatim reports whether rel (slash form) is verbatim: either it
+// exactly matches an entry (a single file named by its root-relative
+// path), or an ancestor directory matches an entry — by base name
+// ("template" at any depth) or by full root-relative path
+// ("docs/helm"). A matched directory's own path still renders — only its
+// contents ship unrendered.
 func isVerbatim(rel string, verbatim []string) bool {
+	if slices.Contains(verbatim, rel) {
+		return true
+	}
 	segments := strings.Split(rel, "/")
-	for _, segment := range segments[:len(segments)-1] {
-		if slices.Contains(verbatim, segment) {
+	for i, segment := range segments[:len(segments)-1] {
+		if slices.Contains(verbatim, segment) || slices.Contains(verbatim, strings.Join(segments[:i+1], "/")) {
 			return true
 		}
 	}

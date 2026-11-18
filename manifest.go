@@ -100,8 +100,8 @@ func LoadManifest(path string) (*Manifest, error) {
 		m.patterns[name] = re
 	}
 	for _, v := range m.Verbatim {
-		if strings.Contains(v, "/") || !fs.ValidPath(v) || v == "." {
-			return nil, fmt.Errorf("%s: verbatim entry %q must be a directory base name (e.g. \"template\"), not a path", path, v)
+		if !fs.ValidPath(v) || v == "." {
+			return nil, fmt.Errorf("%s: verbatim entry %q must be a directory base name (e.g. \"template\") or a clean slash-separated relative path (e.g. \".github/workflows/ci.yml\")", path, v)
 		}
 	}
 	if err := m.parseDefaults(); err != nil {

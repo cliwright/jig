@@ -18,6 +18,11 @@ Releases before 0.4.1 predate this changelog.
   are still fully validated, so `jig check` covers every conditional
   branch; the top-level project directory may not render empty. See
   ADR 19.
+- `verbatim` entries may now name a single file by its root-relative path
+  (e.g. `".github/workflows/ci.yml"`) or a directory by its full
+  root-relative path, alongside the existing directory base names — the
+  escape hatch for foreign-syntax files at the skeleton root, which have
+  no parent directory to list.
 
 ## [0.4.6] - 2026-11-17
 

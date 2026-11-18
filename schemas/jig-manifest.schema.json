@@ -46,7 +46,7 @@
       }
     },
     "verbatim": {
-      "description": "Directory base names whose subtrees are copied verbatim: names and contents are NOT rendered, wherever the directory sits in the skeleton. For templates that ship templates (e.g. a type's embedded template/ dir).",
+      "description": "Entries whose content copies verbatim, unrendered: a directory base name (subtree verbatim wherever the directory sits), a full root-relative directory path, or a single file's root-relative path (e.g. \".github/workflows/ci.yml\"). For templates that ship templates or foreign-syntax files.",
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
       "uniqueItems": true
