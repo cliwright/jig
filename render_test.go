@@ -1,6 +1,7 @@
 package jig
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -821,5 +822,58 @@ func TestRenderVerbatimSingleFilesAndPaths(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(res.OutputDir, "README.md"))
 	if err != nil || string(data) != "# demo\n" {
 		t.Errorf("README.md = %q, %v — want rendered", data, err)
+	}
+}
+
+func TestRenderWritesProvenance(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+		"file.txt": "x\n",
+	})
+	out := t.TempDir()
+	values := map[string]string{"PROJECT_NAME": "demo", "author": "x"}
+	res, err := Render(versionDir, out, values, Options{
+		Provenance: &Provenance{Template: "python/std/lib", Version: 1, Tool: "jig test"},
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(res.OutputDir, ProvenanceFileName))
+	if err != nil {
+		t.Fatalf("provenance record missing: %v", err)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal(data, &rec); err != nil {
+		t.Fatalf("record is not JSON: %v", err)
+	}
+	if rec["template"] != "python/std/lib" || rec["template_version"] != 1.0 || rec["tool"] != "jig test" {
+		t.Errorf("record = %v", rec)
+	}
+	recorded, _ := rec["values"].(map[string]any)
+	if recorded["PROJECT_NAME"] != "demo" || recorded["author"] != "x" {
+		t.Errorf("recorded values = %v", recorded)
+	}
+	// and a render without provenance writes no record
+	res, err = Render(versionDir, t.TempDir(), values, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(res.OutputDir, ProvenanceFileName)); !os.IsNotExist(err) {
+		t.Error("record written without provenance requested")
+	}
+}
+
+func TestRenderProvenanceConflictsWithTemplateFile(t *testing.T) {
+	// a template shipping its own .jig.json fails rather than having it
+	// silently replaced by the record
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":  validManifest,
+		".jig.json": "mine\n",
+	})
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{
+		Provenance: &Provenance{Template: "x/y/z", Version: 1, Tool: "jig test"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("error = %v, want a reserved-name refusal", err)
 	}
 }

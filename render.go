@@ -2,6 +2,7 @@ package jig
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 )
 
 // ManifestFileName is the template manifest's conventional file name,
@@ -32,6 +34,28 @@ type Options struct {
 	// template is data, and links can point anywhere. Even under Trust,
 	// only relative links resolving inside the template tree are allowed.
 	Trust bool
+	// Provenance, when non-nil, is recorded as ProvenanceFileName
+	// (.jig.json) in the rendered project's root: where the project came
+	// from and the values it was rendered with. The file name is then
+	// reserved — a template shipping it fails the render (ADR 20).
+	Provenance *Provenance
+}
+
+// ProvenanceFileName is the render provenance record's file name, written
+// into the rendered project's root.
+const ProvenanceFileName = ".jig.json"
+
+// Provenance identifies where a render came from. The caller supplies it;
+// the library cannot know how the template was addressed.
+type Provenance struct {
+	// Template is the template reference as given: a registry name
+	// (<language>/<flavor>/<kind>) or a filesystem path.
+	Template string
+	// Version is the resolved template version (the N of v<N>); 0 when
+	// unknown, e.g. a template addressed by a direct path.
+	Version int
+	// Tool names the rendering tool, e.g. "jig 0.4.8".
+	Tool string
 }
 
 // Result reports what one Render did.
@@ -217,7 +241,53 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 			return nil, err
 		}
 	}
+	if opts.Provenance != nil {
+		if err := writeProvenance(dest, opts.Provenance, plan, values); err != nil {
+			return nil, err
+		}
+	}
 	return &Result{OutputDir: dest, Unused: m.Unused(used)}, nil
+}
+
+// provenanceRecord is the .jig.json document: enough to know where a
+// rendered project came from and to render it again the same way.
+type provenanceRecord struct {
+	Version         int               `json:"version"` // record schema version
+	Template        string            `json:"template"`
+	TemplateVersion int               `json:"template_version"`
+	Tool            string            `json:"tool"`
+	RenderedAt      string            `json:"rendered_at"`
+	Values          map[string]string `json:"values"`
+}
+
+// writeProvenance writes the .jig.json record into the rendered project
+// root. The name is reserved: a template shipping its own .jig.json fails
+// rather than having it silently replaced.
+func writeProvenance(dest string, p *Provenance, plan *renderPlan, values map[string]string) error {
+	path := filepath.Join(dest, ProvenanceFileName)
+	for _, f := range plan.files {
+		if dstKey(f.dst) == dstKey(path) {
+			return fmt.Errorf("template ships %s: %s is reserved for render provenance", f.dst, ProvenanceFileName)
+		}
+	}
+	for _, d := range plan.dirs {
+		if dstKey(d) == dstKey(path) {
+			return fmt.Errorf("template ships a directory %s: %s is reserved for render provenance", d, ProvenanceFileName)
+		}
+	}
+	rec := provenanceRecord{
+		Version:         1,
+		Template:        p.Template,
+		TemplateVersion: p.Version,
+		Tool:            p.Tool,
+		RenderedAt:      time.Now().UTC().Format(time.RFC3339),
+		Values:          values,
+	}
+	data, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFile(path, append(data, '\n'), 0o644)
 }
 
 // renderPlan is the fully prepared render: directories to create and files

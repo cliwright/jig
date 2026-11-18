@@ -82,6 +82,29 @@ possible.
 `year` and `date` are UTC — for copyright headers and generated-file
 notices. A template using them is not bit-reproducible across time.
 
+## Provenance: `.jig.json`
+
+Every render writes a `.jig.json` record into the rendered project's
+root — where the project came from and the values that produced it:
+
+```json
+{
+  "version": 1,
+  "template": "python/std/lib",
+  "template_version": 1,
+  "tool": "jig 0.4.8",
+  "rendered_at": "2026-11-18T15:04:05Z",
+  "values": { "PROJECT_NAME": "demo" }
+}
+```
+
+The record is data for tooling — finding stale renders in a fleet,
+re-rendering a project the same way — not an update mechanism (see
+[ADR 20](adr/0020-provenance-record.md)). Two consequences worth
+knowing: **values are recorded verbatim**, so never prompt for secrets
+in template variables; and `.jig.json` is reserved — a template may not
+ship its own.
+
 `replace` takes the string last so it composes in pipelines.
 
 ## Templating files that contain `{{ }}`

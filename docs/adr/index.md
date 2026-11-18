@@ -23,6 +23,7 @@ one, never an edit.
 - [16. Prepare everything before writing anything](0016-prepare-then-write.md)
 - [17. Escaping foreign template syntax with `ldelim`/`rdelim`](0017-escaping-foreign-syntax.md)
 - [19. Conditional files and directories: empty-rendered names are excluded](0019-conditional-files.md)
+- [20. Render provenance: the `.jig.json` record](0020-provenance-record.md)
 
 ## Rejected features (adopted as constraints)
 

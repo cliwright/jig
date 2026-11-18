@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -93,7 +96,8 @@ func runRender(cmd *cobra.Command, templateArg, output string, version int, temp
 		return err
 	}
 
-	res, err := jig.Render(dir, output, values, jig.Options{Force: force, Trust: trust})
+	res, err := jig.Render(dir, output, values, jig.Options{Force: force, Trust: trust,
+		Provenance: renderProvenance(dir, templateArg)})
 	if err != nil {
 		return err
 	}
@@ -103,4 +107,13 @@ func runRender(cmd *cobra.Command, templateArg, output string, version int, temp
 		fmt.Fprintf(out, "warning: variable %s is declared but never used by the template\n", name)
 	}
 	return nil
+}
+
+// renderProvenance builds the .jig.json record from the resolved
+// template: the reference as given, the version parsed from the resolved
+// v<N> directory (0 when addressed by a direct path, so not v<N>-shaped),
+// and this binary's version.
+func renderProvenance(dir, templateArg string) *jig.Provenance {
+	n, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(dir), "v"))
+	return &jig.Provenance{Template: templateArg, Version: n, Tool: "jig " + version}
 }

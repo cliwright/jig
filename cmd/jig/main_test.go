@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -405,5 +406,30 @@ func TestMainPrintsErrorAndExitsNonZero(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "Error:") {
 		t.Errorf("stderr = %q, want the printed error", stderr.String())
+	}
+}
+
+func TestRenderCmdWritesProvenance(t *testing.T) {
+	templatesDir := fixtureTemplate(t)
+	out := t.TempDir()
+	_, err := run(t, []string{"render", "--template", "python/std/lib",
+		"--templates-dir", templatesDir, "--output", out,
+		"--var", "PROJECT_NAME=widget"}, pipeStdin(t))
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(out, "widget", ".jig.json"))
+	if err != nil {
+		t.Fatalf("provenance record missing: %v", err)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal(data, &rec); err != nil {
+		t.Fatalf("record is not JSON: %v", err)
+	}
+	if rec["template"] != "python/std/lib" || rec["template_version"] != 1.0 {
+		t.Errorf("record = %v", rec)
+	}
+	if tool, _ := rec["tool"].(string); !strings.HasPrefix(tool, "jig ") {
+		t.Errorf("tool = %v, want jig <version>", rec["tool"])
 	}
 }

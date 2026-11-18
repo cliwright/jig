@@ -26,6 +26,13 @@ Releases before 0.4.1 predate this changelog.
 - New template functions `year` and `date` (UTC) for copyright headers
   and generated-file notices. Templates using them are not
   bit-reproducible across time.
+- Renders now write a `.jig.json` provenance record into the project
+  root: template ref and version, tool, timestamp, and the resolved
+  values verbatim — enough for tooling to find stale renders or render
+  the project again identically. The library exposes it as opt-in
+  `Options.Provenance` (smith records its own provenance); the CLI
+  always writes it. `.jig.json` is reserved — a template may not ship
+  its own. See ADR 20.
 
 ### Fixed
 
