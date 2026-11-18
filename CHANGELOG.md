@@ -24,6 +24,14 @@ Releases before 0.4.1 predate this changelog.
   escape hatch for foreign-syntax files at the skeleton root, which have
   no parent directory to list.
 
+### Fixed
+
+- `--template` (and library `ResolveTemplate`) no longer lets a directory
+  in the working directory shadow a registry template name: a path must
+  look like one — absolute, or starting with `./`/`../`. Bare relative
+  paths that worked by accident now resolve under `--templates-dir`;
+  prefix them with `./` to keep the old reading.
+
 ## [0.4.6] - 2026-11-17
 
 ### Added

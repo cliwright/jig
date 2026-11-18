@@ -160,5 +160,9 @@ Update later with `git pull`. Repos that don't follow the
 3. **A path to a version directory** — a directory holding the
    `{{.PROJECT_NAME}}/` skeleton directly; used as-is.
 
+A path must *look* like one — absolute, or starting with `./` (or `../`)
+— so a directory in your working directory can never shadow a registry
+template name.
+
 The skeleton directory is always named `{{.PROJECT_NAME}}` and always holds
 the template's `jig.json`. See [the manifest reference](manifest.md).

@@ -47,10 +47,13 @@ type Result struct {
 // a registry-style name (<language>/<flavor>/<kind>, resolved under
 // templatesDir), a path to a template root (holding v<N> directories), or a
 // path to a version directory itself (holding {{.PROJECT_NAME}}/, used
-// as-is). version <= 0 selects the latest (highest N).
+// as-is). A path must look like one — absolute, or starting with an
+// explicit ./ or ../ segment — so a directory in the current working
+// directory can never shadow a registry template name. version <= 0
+// selects the latest (highest N).
 func ResolveTemplate(templatesDir, name string, version int) (string, error) {
 	base := name
-	if info, err := os.Stat(name); err != nil || !info.IsDir() {
+	if !looksLikePath(name) {
 		base = filepath.Join(templatesDir, filepath.FromSlash(name))
 	}
 	if info, err := os.Stat(filepath.Join(base, TemplateDirName)); err == nil && info.IsDir() {
@@ -107,6 +110,20 @@ func LoadSkeletonManifest(versionDir string, trust bool) (*Manifest, error) {
 		return nil, fmt.Errorf("template contains non-regular manifest %s: only regular files are allowed", path)
 	}
 	return LoadManifest(path)
+}
+
+// looksLikePath reports whether name is meant as a filesystem path rather
+// than a registry-style template name: absolute, or starting with an
+// explicit dot segment ("./x", "../x", ".", ".."). Registry names never
+// start with a dot, so the two forms cannot collide.
+func looksLikePath(name string) bool {
+	if filepath.IsAbs(name) {
+		return true
+	}
+	name = filepath.FromSlash(name)
+	return name == "." || name == ".." ||
+		strings.HasPrefix(name, "."+string(filepath.Separator)) ||
+		strings.HasPrefix(name, ".."+string(filepath.Separator))
 }
 
 // Render renders the template in versionDir into outputDir. The version

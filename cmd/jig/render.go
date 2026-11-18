@@ -47,7 +47,7 @@ directory is fine as long as no file collides.`,
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&templateArg, "template", "", "template name (<lang>/<flavor>/<kind>) or path to a version directory")
+	f.StringVar(&templateArg, "template", "", "template name (<lang>/<flavor>/<kind>) or path to a version directory (prefix relative paths with ./)")
 	f.StringVar(&output, "output", "", "parent directory for the rendered project")
 	f.IntVar(&version, "version", 0, "template version (default: latest)")
 	f.StringVar(&templatesDir, "templates-dir", os.Getenv("JIG_TEMPLATES_DIR"), "template registry root (default: $JIG_TEMPLATES_DIR or the current directory)")

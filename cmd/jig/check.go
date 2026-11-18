@@ -33,7 +33,7 @@ warnings. Exits non-zero on any error — run it before shipping a template.`,
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&templateArg, "template", "", "template name (<lang>/<flavor>/<kind>) or path to a version directory")
+	f.StringVar(&templateArg, "template", "", "template name (<lang>/<flavor>/<kind>) or path to a version directory (prefix relative paths with ./)")
 	f.IntVar(&version, "version", 0, "template version (default: latest)")
 	f.StringVar(&templatesDir, "templates-dir", os.Getenv("JIG_TEMPLATES_DIR"), "template registry root (default: $JIG_TEMPLATES_DIR or the current directory)")
 	return cmd

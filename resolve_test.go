@@ -71,3 +71,30 @@ func TestResolveTemplateErrors(t *testing.T) {
 		t.Errorf("error = %v, want no-version-directories", err)
 	}
 }
+
+func TestResolveTemplateIgnoresCwdShadow(t *testing.T) {
+	// a directory in the cwd sharing a template's name must not shadow
+	// the registry: only explicit ./ or absolute paths are paths
+	templatesDir := t.TempDir()
+	versionDir := filepath.Join(templatesDir, "python", "std", "lib", "v1")
+	if err := os.MkdirAll(filepath.Join(versionDir, TemplateDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(work, "python", "std", "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(work)
+	dir, err := ResolveTemplate(templatesDir, "python/std/lib", 0)
+	if err != nil {
+		t.Fatalf("ResolveTemplate: %v", err)
+	}
+	if dir != versionDir {
+		t.Errorf("dir = %q, want %q — the cwd directory shadowed the registry", dir, versionDir)
+	}
+	// an explicit ./ prefix makes the path reading deliberate
+	_, err = ResolveTemplate(templatesDir, "./python/std/lib", 0)
+	if err == nil || !strings.Contains(err.Error(), "no version directories") {
+		t.Errorf("error = %v, want the ./ path read (empty of versions)", err)
+	}
+}
