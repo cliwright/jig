@@ -45,7 +45,7 @@ brews:
       name: homebrew-cliwright
     commit_author:
       name: Jesse Maitland
-      email: jesse@cliwright.com
+      email: jesse@cliwright.dev
 
 checksum:
   name_template: 'checksums.txt'
