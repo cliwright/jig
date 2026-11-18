@@ -1,6 +1,9 @@
 package jig
 
-import "testing"
+import (
+	"regexp"
+	"testing"
+)
 
 func TestSlugify(t *testing.T) {
 	tests := []struct{ in, want string }{
@@ -47,5 +50,22 @@ func TestDelims(t *testing.T) {
 	want := `run: echo "${{ github.ref }}" # demo`
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestYearAndDate(t *testing.T) {
+	got, err := renderString("{{year}}", nil, map[string]bool{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^20[0-9]{2}$`).MatchString(got) {
+		t.Errorf("year = %q, want a four-digit year", got)
+	}
+	got, err = renderString("{{date}}", nil, map[string]bool{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^20[0-9]{2}-[01][0-9]-[0-3][0-9]$`).MatchString(got) {
+		t.Errorf("date = %q, want YYYY-MM-DD", got)
 	}
 }

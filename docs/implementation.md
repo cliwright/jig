@@ -76,6 +76,11 @@ possible.
 | `slugify` | `slugify s` | `{{slugify .TITLE}}` | `My Cool App!` → `my-cool-app` |
 | `ldelim` | `ldelim` | `{{ldelim}}` | `{{` |
 | `rdelim` | `rdelim` | `{{rdelim}}` | `}}` |
+| `year` | `year` | `{{year}}` | → `2026` |
+| `date` | `date` | `{{date}}` | → `2026-11-18` |
+
+`year` and `date` are UTC — for copyright headers and generated-file
+notices. A template using them is not bit-reproducible across time.
 
 `replace` takes the string last so it composes in pipelines.
 

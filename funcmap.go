@@ -2,8 +2,10 @@ package jig
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
+	"time"
 )
 
 // funcMap is the hand-rolled set of string helpers available to templates.
@@ -18,6 +20,8 @@ var funcMap = template.FuncMap{
 	"slugify": slugify,
 	"ldelim":  ldelim,
 	"rdelim":  rdelim,
+	"year":    year,
+	"date":    date,
 }
 
 // replace implements {{ .Var | replace "old" "new" }} — all occurrences.
@@ -33,6 +37,14 @@ func replace(old, new, s string) string {
 func ldelim() string { return "{{" }
 
 func rdelim() string { return "}}" }
+
+// year and date stamp renders — copyright headers, generated-file
+// notices. Both UTC, so a render at least doesn't depend on the author's
+// timezone; a template using them is of course not bit-reproducible
+// across time.
+func year() string { return strconv.Itoa(time.Now().UTC().Year()) }
+
+func date() string { return time.Now().UTC().Format("2006-01-02") }
 
 var slugSep = regexp.MustCompile(`[^a-z0-9-]+`)
 

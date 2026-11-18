@@ -23,6 +23,9 @@ Releases before 0.4.1 predate this changelog.
   root-relative path, alongside the existing directory base names — the
   escape hatch for foreign-syntax files at the skeleton root, which have
   no parent directory to list.
+- New template functions `year` and `date` (UTC) for copyright headers
+  and generated-file notices. Templates using them are not
+  bit-reproducible across time.
 
 ### Fixed
 
