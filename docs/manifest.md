@@ -120,7 +120,10 @@ answering `PROJECT_NAME` differently also fixes `PKG`.
   directory) in `verbatim` rather than relying on the heuristic.
 - **Executable bits** are preserved — exactly: written files are `Chmod`ed
   to the template's mode, so umask and pre-existing destination modes
-  (`--force`) don't dilute them. Overwrites *replace* the destination
+  (`--force`) don't dilute them. The same exactness applies in the other
+  direction: umask is not consulted, so a template file checked in as
+  group- or world-writable renders that way — set modes on template files
+  deliberately. Overwrites *replace* the destination
   (temp file + rename) rather than truncating it, so a `--force` render
   can't modify data outside the output tree through a hard-linked
   destination, and an existing non-regular destination (FIFO, device) is
