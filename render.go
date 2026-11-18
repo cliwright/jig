@@ -123,6 +123,10 @@ func LoadSkeletonManifest(versionDir string, trust bool) (*Manifest, error) {
 // create directories and files — a template error never leaves a partial
 // tree. (Disk failures mid-write and concurrent filesystem changes remain
 // outside the guarantee.)
+//
+// A file or directory whose name renders to an empty string is excluded
+// from the output — the conditional-inclusion mechanism (ADR 19). The
+// top-level project directory may not render empty.
 func Render(versionDir, outputDir string, values map[string]string, opts Options) (*Result, error) {
 	skel := filepath.Join(versionDir, TemplateDirName)
 	m, err := LoadSkeletonManifest(versionDir, opts.Trust)
@@ -227,6 +231,15 @@ type plannedFile struct {
 // name. Symlinks are rejected unless trust is set; trusted links must
 // resolve inside the template tree and are recreated as links in the
 // output.
+//
+// A name that renders to an empty string is the conditional mechanism: the
+// file or directory is excluded from the output, and excluding a directory
+// prunes its whole subtree (ADR 19). Excluded entries are still fully
+// validated — names are contained, contents are parsed and executed,
+// symlink and special-file policy applies — so check covers every
+// conditional branch, not only the ones the current values select. Only
+// emitted entries take part in collision detection: two siblings excluded
+// under the same values cannot collide in the output.
 func planRender(skel, dest string, values map[string]string, used map[string]bool, verbatim []string, trust bool) (*renderPlan, error) {
 	plan := &renderPlan{}
 	renderedDirs := map[string]string{"": dest, ".": dest}
@@ -234,6 +247,7 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 		kind, rel string
 	}
 	planned := map[string]dstKind{}
+	skipped := map[string]bool{} // slash rels of directories that rendered to an empty name
 	err := filepath.WalkDir(skel, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -249,7 +263,9 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 			return nil // the template's own manifest never renders into the output
 		}
 		relSlash := filepath.ToSlash(rel)
-		parentOut := renderedDirs[pathpkg.Dir(relSlash)]
+		parentRelSlash := pathpkg.Dir(relSlash)
+		parentOut := renderedDirs[parentRelSlash]
+		excluded := skipped[parentRelSlash]
 		name := filepath.Base(rel)
 		kind := "file"
 		if d.IsDir() {
@@ -263,29 +279,39 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 				return fmt.Errorf("rendering %s name %s: %w", kind, rel, err)
 			}
 		}
-		out, err := containedPath(parentOut, name)
-		if err != nil {
+		out := parentOut
+		if name == "" {
+			excluded = true // conditional entry: renders to nothing, excluded from the output
+		} else if out, err = containedPath(parentOut, name); err != nil {
 			return fmt.Errorf("rendering %s name %s: %w", kind, rel, err)
 		}
 		if d.IsDir() {
+			renderedDirs[relSlash] = out
+			if excluded {
+				skipped[relSlash] = true
+				return nil
+			}
 			if prev, ok := planned[dstKey(out)]; ok && prev.kind != "directory" {
 				return fmt.Errorf("collision: file %s and directory %s both render to %s", prev.rel, rel, out)
 			}
 			planned[dstKey(out)] = dstKind{kind: "directory", rel: rel}
-			renderedDirs[relSlash] = out
 			plan.dirs = append(plan.dirs, out)
 			return nil
 		}
-		if prev, ok := planned[dstKey(out)]; ok {
-			return fmt.Errorf("collision: %s %s and %s %s both render to %s", prev.kind, prev.rel, kind, rel, out)
+		if !excluded {
+			if prev, ok := planned[dstKey(out)]; ok {
+				return fmt.Errorf("collision: %s %s and %s %s both render to %s", prev.kind, prev.rel, kind, rel, out)
+			}
+			planned[dstKey(out)] = dstKind{kind: kind, rel: rel}
 		}
-		planned[dstKey(out)] = dstKind{kind: kind, rel: rel}
 		if d.Type()&fs.ModeSymlink != 0 {
 			linkTarget, err := checkSymlink(skel, path, trust)
 			if err != nil {
 				return err
 			}
-			plan.files = append(plan.files, plannedFile{dst: out, linkTarget: linkTarget})
+			if !excluded {
+				plan.files = append(plan.files, plannedFile{dst: out, linkTarget: linkTarget})
+			}
 			return nil
 		}
 		if !d.Type().IsRegular() {
@@ -299,13 +325,18 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 		}
 		var data []byte
 		if isVerbatim(relSlash, verbatim) {
+			if excluded {
+				return nil // verbatim content ships unrendered; nothing to validate
+			}
 			if data, err = os.ReadFile(path); err != nil {
 				return err
 			}
 		} else if data, err = renderContent(path, values, used); err != nil {
 			return err
 		}
-		plan.files = append(plan.files, plannedFile{dst: out, data: data, mode: info.Mode().Perm()})
+		if !excluded {
+			plan.files = append(plan.files, plannedFile{dst: out, data: data, mode: info.Mode().Perm()})
+		}
 		return nil
 	})
 	if err != nil {

@@ -22,6 +22,7 @@ one, never an edit.
 - [14. Overwrite refusal is per file, not per directory](0014-per-file-overwrite.md)
 - [16. Prepare everything before writing anything](0016-prepare-then-write.md)
 - [17. Escaping foreign template syntax with `ldelim`/`rdelim`](0017-escaping-foreign-syntax.md)
+- [19. Conditional files and directories: empty-rendered names are excluded](0019-conditional-files.md)
 
 ## Rejected
 

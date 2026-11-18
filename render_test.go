@@ -307,14 +307,23 @@ func TestRenderRefusesSymlinkedProjectDir(t *testing.T) {
 	}
 }
 
-func TestRenderRefusesEmptyRenderedName(t *testing.T) {
+func TestRenderSkipsEmptyRenderedName(t *testing.T) {
+	// a name rendering to an empty string is the conditional mechanism:
+	// the file is excluded, not an error (ADR 19)
 	versionDir := writeTemplate(t, map[string]string{
 		"jig.json":    `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}, "suffix": {"default": ""}}}`,
 		"{{.suffix}}": "x\n",
 	})
-	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "suffix": ""}, Options{})
-	if err == nil || !strings.Contains(err.Error(), "empty name") {
-		t.Fatalf("error = %v, want empty-name refusal", err)
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "suffix": ""}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	entries, err := os.ReadDir(res.OutputDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("output = %v, want the empty-named file excluded", entries)
 	}
 }
 
@@ -680,5 +689,105 @@ func TestRenderManifestOnlyTemplateCreatesOutputDir(t *testing.T) {
 	info, err := os.Stat(res.OutputDir)
 	if err != nil || !info.IsDir() {
 		t.Errorf("OutputDir = %s, stat: %v — want a created directory", res.OutputDir, err)
+	}
+}
+
+func TestRenderConditionalFile(t *testing.T) {
+	manifest := `{"version": 1, "variables": {
+		"PROJECT_NAME": {"default": "demo"},
+		"WITH_DOCKER": {"default": "no", "choices": ["yes", "no"]}}}`
+	// backticks, not quotes: '"' is illegal in Windows file names
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":  manifest,
+		"README.md": "# {{.PROJECT_NAME}}\n",
+		"{{if eq .WITH_DOCKER `yes`}}Dockerfile{{end}}": "FROM scratch\n",
+	})
+	// excluded: nothing rendered, and the variable still counts as used
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "WITH_DOCKER": "no"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(res.OutputDir, "Dockerfile")); !os.IsNotExist(err) {
+		t.Error("Dockerfile rendered despite WITH_DOCKER=no")
+	}
+	if len(res.Unused) != 0 {
+		t.Errorf("unused = %v, want none", res.Unused)
+	}
+	// included under the other choice
+	res, err = Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "WITH_DOCKER": "yes"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(res.OutputDir, "Dockerfile")); err != nil {
+		t.Errorf("Dockerfile missing with WITH_DOCKER=yes: %v", err)
+	}
+}
+
+func TestRenderConditionalDirectoryPrunesSubtree(t *testing.T) {
+	manifest := `{"version": 1, "variables": {
+		"PROJECT_NAME": {"default": "demo"},
+		"KIND": {"default": "lib", "choices": ["lib", "cli"]}}}`
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":  manifest,
+		"README.md": "x\n",
+		"{{if eq .KIND `cli`}}cmd{{end}}/main.go":    "package main\n",
+		"{{if eq .KIND `cli`}}cmd{{end}}/extra/x.go": "package main\n",
+	})
+	res, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "KIND": "lib"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	entries, err := os.ReadDir(res.OutputDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "README.md" {
+		names := []string{}
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("output = %v, want only README.md", names)
+	}
+	res, err = Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "KIND": "cli"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(res.OutputDir, "cmd", "main.go")); err != nil {
+		t.Errorf("cmd/main.go missing with KIND=cli: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(res.OutputDir, "cmd", "extra", "x.go")); err != nil {
+		t.Errorf("cmd/extra/x.go missing with KIND=cli: %v", err)
+	}
+}
+
+func TestRenderConditionalContentStillValidated(t *testing.T) {
+	// a broken template hiding in an excluded branch still fails, for
+	// Render and for Check
+	manifest := `{"version": 1, "variables": {
+		"PROJECT_NAME": {"default": "demo"},
+		"X": {"default": "no", "choices": ["yes", "no"]}}}`
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":                       manifest,
+		"{{if eq .X `yes`}}f.txt{{end}}": "{{.NOPE}}\n",
+	})
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "X": "no"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "NOPE") {
+		t.Fatalf("Render error = %v, want the excluded file's bad content to fail", err)
+	}
+	if _, err := Check(versionDir); err == nil || !strings.Contains(err.Error(), "NOPE") {
+		t.Fatalf("Check error = %v, want the excluded file's bad content to fail", err)
+	}
+}
+
+func TestRenderEmptyProjectNameStillRefused(t *testing.T) {
+	// conditional exclusion is for files and directories INSIDE the
+	// skeleton; the project directory itself may not render empty
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}}}`,
+		"file.txt": "x\n",
+	})
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": ""}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("error = %v, want an empty-name refusal", err)
 	}
 }

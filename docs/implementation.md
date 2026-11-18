@@ -43,6 +43,25 @@ File and directory *contents* are unaffected — pipelines inside a file
 work on every platform, since the content is rendered in memory and only
 the result touches disk.
 
+## Conditional files and directories
+
+A file or directory whose *name* renders to an empty string is excluded
+from the output — the conditional lives in the name, the content stays
+plain:
+
+```
+{{if eq .WITH_DOCKER `yes`}}Dockerfile{{end}}
+{{if eq .KIND `cli`}}cmd{{end}}/main.go
+```
+
+(Use backtick raw strings, not `"` — quotes are illegal in Windows file
+names, see above.) Excluding a directory prunes its whole subtree.
+Excluded entries are still fully validated — names, contents, and symlink
+policy are checked as if they were rendered — so `jig check` covers every
+conditional branch, not just the ones your defaults select. The top-level
+project directory may not render empty; that stays a hard error. See
+[ADR 19](adr/0019-conditional-files.md).
+
 ## String helpers
 
 On top of the standard library, jig maps a deliberately tiny set of string

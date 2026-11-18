@@ -9,6 +9,16 @@ Releases before 0.4.1 predate this changelog.
 
 ## [Unreleased]
 
+### Added
+
+- Conditional files and directories: a name that renders to an empty
+  string is excluded from the output (an excluded directory prunes its
+  subtree), so optional content — a Dockerfile for one choice and not the
+  other — needs no hooks and no template multiplication. Excluded entries
+  are still fully validated, so `jig check` covers every conditional
+  branch; the top-level project directory may not render empty. See
+  ADR 19.
+
 ## [0.4.6] - 2026-11-17
 
 ### Added
