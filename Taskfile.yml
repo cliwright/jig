@@ -23,6 +23,10 @@ tasks:
     desc: Run go vet
     cmd: go vet ./...
 
+  changelog:
+    desc: Regenerate the CHANGELOG.md unreleased section (draft — edit before committing)
+    cmd: git cliff --config cliff.toml --include-path "tools/jig/**" --unreleased --prepend CHANGELOG.md
+
   # ── Docs ──────────────────────────────────────────────────────────────────
 
   docs:

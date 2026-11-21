@@ -1,0 +1,60 @@
+# git-cliff configuration for jig's CHANGELOG.md.
+#
+# Run via `task changelog` (or see the changelog task for the direct
+# command). Generation runs against the development monorepo, where the
+# real history and the `jig/v*` tags live; in the mirror repository the
+# same file works unflagged, since the whole repo is jig and tags are
+# plain `v*`. See docs/adr/0001-git-cliff-changelogs.md there.
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+# Monorepo tags are `jig/v*`; mirror tags are `v*`.
+tag_pattern = "^(jig/)?v[0-9]+\\.[0-9]+\\.[0-9]+$"
+
+# Groups follow Keep a Changelog. The scope is always (jig) in the
+# monorepo, so parsers ignore it; the template strips it from messages.
+commit_parsers = [
+  { message = "^[a-z]+(\\([^)]*\\))?!:", group = "Breaking changes" },
+  { message = "^feat", group = "Added" },
+  { message = "^fix", group = "Fixed" },
+  { message = "^refactor", group = "Changed" },
+  { message = "^perf", group = "Changed" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^revert", group = "Fixed" },
+  { body = ".*security", group = "Security" },
+  { message = ".*", group = "Other" },
+]
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to jig are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and jig versions
+with [Semantic Versioning](https://semver.org/): breaking library or CLI
+changes bump the minor version until 1.0, then the major.
+
+Releases before 0.4.1 predate this changelog.
+
+"""
+# Changelog body — one Keep-a-Changelog section per release (git-cliff
+# renders `body` once per release; the context is that release). The tag
+# prefix (`jig/v` in the monorepo, `v` in the mirror) is trimmed to the
+# bare version, and the conventional-commit prefix is stripped from each
+# message. Generated output is a draft: edit it into prose before
+# committing.
+body = """
+{% if version -%}
+    ## [{{ version | trim_start_matches(pat="jig/v") | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+    ## [Unreleased]
+{% endif %}
+{% for group, commits in commits | group_by(attribute="group") -%}
+    ### {{ group | upper_first }}
+    {% for commit in commits -%}
+        - {{ commit.message | split(pat="\n") | first | replace(from="^[a-z]+(\\([^)]*\\))?!?:\\s*", to="") | trim | upper_first }}
+    {% endfor %}
+{% endfor -%}
+"""
+trim = true

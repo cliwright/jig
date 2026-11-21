@@ -2,3 +2,4 @@
 go = "1.25"
 task = "3"
 uv = "latest"
+git-cliff = "2"
