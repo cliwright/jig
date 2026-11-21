@@ -16,6 +16,7 @@ nav = [
 ]
 
 [project.theme]
+variant = "classic"
 language = "en"
 palette = { scheme = "whoiam" }
 icon = { repo = "fontawesome/brands/git-alt" }
