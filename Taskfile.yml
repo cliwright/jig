@@ -1,0 +1,34 @@
+version: "3"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmd: task --list
+
+  # ── Go ────────────────────────────────────────────────────────────────────
+
+  build:
+    desc: Build the jig binary into bin/
+    cmd: go build -o bin/jig ./cmd/jig
+
+  test:
+    desc: Run all tests with the race detector
+    cmd: go test ./... -race
+
+  fmt:
+    desc: Format Go source files
+    cmd: gofmt -w .
+
+  lint:
+    desc: Run go vet
+    cmd: go vet ./...
+
+  # ── Docs ──────────────────────────────────────────────────────────────────
+
+  docs:
+    desc: Build the docs site (docs/ → site/, requires uv)
+    cmd: uvx zensical build
+
+  docs:serve:
+    desc: Preview the docs site at http://localhost:8000 (requires uv)
+    cmd: uvx zensical serve

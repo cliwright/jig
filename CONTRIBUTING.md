@@ -44,7 +44,11 @@ authorship) and closes the PR with a link to the imported commit.
 - Keep it small. jig's codebase is deliberately lean; a fix that needs a
   framework is probably the wrong fix.
 - Match the surrounding style, and run `go test ./...`, `go vet ./...`, and
-  `gofmt` before opening.
+  `gofmt` before opening. A [Taskfile](Taskfile.yml) wraps these —
+  `task build`, `task test`, `task fmt`, `task lint` — plus `task docs`
+  and `task docs:serve` for the documentation site
+  ([go-task](https://taskfile.dev) required; `mise.toml` pins the Go,
+  Task, and uv toolchain if you use [mise](https://mise.jdx.dev)).
 - Add or update tests for the behavior you're changing.
 - Update the docs (and the changelog's Unreleased section) when behavior
   changes.
