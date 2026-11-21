@@ -2,6 +2,8 @@
 site_name = "jig"
 site_description = "Render project templates — no hooks, no code execution, templates are data"
 site_url = "https://jig.cliwright.dev"
+repo_url = "https://github.com/cliwright/jig"
+repo_name = "cliwright/jig"
 extra_css = ["stylesheets/extra.css"]
 
 nav = [
@@ -16,6 +18,7 @@ nav = [
 [project.theme]
 language = "en"
 palette = { scheme = "whoiam" }
+icon = { repo = "fontawesome/brands/git-alt" }
 features = [
   "content.code.annotate",
   "content.code.copy",
