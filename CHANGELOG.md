@@ -9,6 +9,8 @@ Releases before 0.4.1 predate this changelog.
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-11-21
+
 ### Added
 
 - Conditional files and directories: a name that renders to an empty
@@ -33,6 +35,14 @@ Releases before 0.4.1 predate this changelog.
   `Options.Provenance` (smith records its own provenance); the CLI
   always writes it. `.jig.json` is reserved — a template may not ship
   its own. See ADR 20.
+- The docs site header links the GitHub repository (with star and fork
+  counts), and the site uses the classic Material theme variant, matching
+  the whoiam docs.
+- The repository ships a `Taskfile.yml` (`task build`, `task test`,
+  `task fmt`, `task lint`, `task docs`, `task docs:serve`,
+  `task changelog`) and a `mise.toml` pinning Go, Task, uv, and
+  git-cliff — a fresh clone has a one-command entry point, and changelog
+  sections are drafted from conventional commits.
 
 ### Fixed
 
@@ -41,6 +51,15 @@ Releases before 0.4.1 predate this changelog.
   look like one — absolute, or starting with `./`/`../`. Bare relative
   paths that worked by accident now resolve under `--templates-dir`;
   prefix them with `./` to keep the old reading.
+
+## [0.4.7] - 2026-11-18
+
+### Changed
+
+- The release workflow moved to the mirror repository: pushing a tag now
+  runs GoReleaser there (keyless cosign signature plus SPDX SBOMs, as
+  introduced in 0.4.6), and the monorepo's mirror workflow is sync-only.
+  No functional changes to the tool.
 
 ## [0.4.6] - 2026-11-17
 
