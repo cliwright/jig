@@ -124,5 +124,9 @@ func ReadVarsFile(path string) (map[string]string, error) {
 	if err := json.Unmarshal(data, &values); err != nil {
 		return nil, fmt.Errorf("parsing %s: want a JSON object of string values: %w", path, err)
 	}
+	if values == nil {
+		// a bare JSON null unmarshals into a nil map without an error
+		return nil, fmt.Errorf("parsing %s: want a JSON object of string values, got null", path)
+	}
 	return values, nil
 }

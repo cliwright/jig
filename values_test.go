@@ -96,12 +96,30 @@ func TestStdinPrompterDefaultsOnEmpty(t *testing.T) {
 }
 
 func TestReadVarsFileRejectsNonObject(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "vars.json")
-	if err := os.WriteFile(path, []byte(`["not", "an", "object"]`), 0o644); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name    string
+		content string
+		wantErr bool
+	}{
+		{"array", `["not", "an", "object"]`, true},
+		{"null", `null`, true},
+		{"string value is a number", `{"author": 42}`, true},
+		{"empty object", `{}`, false},
 	}
-	if _, err := ReadVarsFile(path); err == nil {
-		t.Fatal("want an error for a non-object vars file")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "vars.json")
+			if err := os.WriteFile(path, []byte(tt.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			values, err := ReadVarsFile(path)
+			if tt.wantErr && err == nil {
+				t.Fatalf("want an error for %s, got values %v", tt.name, values)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("want no error for %s, got %v", tt.name, err)
+			}
+		})
 	}
 }
 
