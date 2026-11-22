@@ -43,3 +43,9 @@ func TestDoc(t *testing.T) {
 		t.Errorf("Doc(bogus) = %v, want an error listing pages", err)
 	}
 }
+
+func TestDocUnknownPage(t *testing.T) {
+	if _, err := Doc("no-such-page"); err == nil || !strings.Contains(err.Error(), "unknown docs page") {
+		t.Fatalf("Doc error = %v, want an unknown-page refusal", err)
+	}
+}

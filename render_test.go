@@ -987,3 +987,118 @@ func TestRenderPreservesExistingProvenanceUnlessForce(t *testing.T) {
 		t.Errorf("record = %q, %v — want the new provenance record", data, err)
 	}
 }
+
+func TestRenderRefusesEscapingProjectName(t *testing.T) {
+	// containment is enforced by jig itself, not left to the manifest's
+	// pattern: a value that escapes the output directory fails the render
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {"PROJECT_NAME": {"default": "demo"}}}`,
+		"file.txt": "x\n",
+	})
+	out := t.TempDir()
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "../evil"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "escapes the output directory") {
+		t.Fatalf("error = %v, want a containment refusal", err)
+	}
+	if entries, _ := os.ReadDir(out); len(entries) != 0 {
+		t.Errorf("failed render left output behind: %v", entries)
+	}
+}
+
+func TestRenderCatchesFileDirectoryCollision(t *testing.T) {
+	// a file and a directory rendering to the same destination collide:
+	// the walk plans the file first, then refuses the directory
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"A": {"default": "same"}, "B": {"default": "same"}}}`,
+		"{{.A}}":           "file\n",
+		"{{.B}}/inner.txt": "inner\n",
+	})
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "A": "same", "B": "same"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "collision") || !strings.Contains(err.Error(), "directory") {
+		t.Fatalf("error = %v, want a file/directory collision refusal", err)
+	}
+}
+
+func TestRenderPreflightsDirectoryBlockedByFile(t *testing.T) {
+	// a planned directory whose destination is an existing regular file
+	// fails the type preflight — the chain check exempts the final path
+	// component, so this preflight is the guard that fires. The directory
+	// is planned empty: its only file is conditionally excluded.
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"WITH_X": {"default": "no", "choices": ["yes", "no"]}}}`,
+		"sub/{{if eq .WITH_X `yes`}}f.txt{{end}}": "x\n",
+	})
+	out := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(out, "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(out, "demo", "sub"), []byte("blocker\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "WITH_X": "no"}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("error = %v, want a destination-type refusal", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(out, "demo", "sub")); string(data) != "blocker\n" {
+		t.Error("the blocking file was disturbed")
+	}
+}
+
+func TestRenderRejectsAbsoluteSymlinkTarget(t *testing.T) {
+	// even trusted, an absolute link would recreate as a pointer back to
+	// the author's machine — the target string alone condemns it, the
+	// target need not exist
+	versionDir := writeSymlinkTemplate(t, "/etc/hostname")
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Trust: true})
+	if err == nil || !strings.Contains(err.Error(), "absolute target") {
+		t.Fatalf("error = %v, want an absolute-target refusal", err)
+	}
+}
+
+func TestRenderRejectsEscapingSymlinkTarget(t *testing.T) {
+	// a trusted link must resolve inside the template tree
+	versionDir := writeSymlinkTemplate(t, "../../../../etc/hostname")
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Trust: true})
+	if err == nil || !strings.Contains(err.Error(), "outside the template tree") {
+		t.Fatalf("error = %v, want an escaping-target refusal", err)
+	}
+}
+
+func TestRenderProvenanceReservedCoversDirectory(t *testing.T) {
+	// a directory named .jig.json collides with the record just the same
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":            validManifest,
+		".jig.json/inner.txt": "mine\n",
+	})
+	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{
+		Provenance: &Provenance{Template: "x/y/z", Version: 1, Tool: "jig test"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("error = %v, want a reserved-name refusal", err)
+	}
+}
+
+func TestRenderExcludedDirSkipsVerbatimFiles(t *testing.T) {
+	// a verbatim file under an excluded directory needs no validation at
+	// all: nothing is emitted, and its content ships unrendered anyway —
+	// even a body that would fail rendering passes
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"WITH_X": {"default": "no", "choices": ["yes", "no"]}},
+			"verbatim": ["template"]}`,
+		"{{if eq .WITH_X `yes`}}sub{{end}}/template/f.txt": "{{ .UNDECLARED }}\n",
+	})
+	out := t.TempDir()
+	res, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "WITH_X": "no"}, Options{})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if entries, _ := os.ReadDir(res.OutputDir); len(entries) != 0 {
+		t.Errorf("excluded tree left output behind: %v", entries)
+	}
+}

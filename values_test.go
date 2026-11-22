@@ -305,3 +305,9 @@ func TestStdinPrompterEOFFails(t *testing.T) {
 		t.Fatalf("error = %v, want a read error", err)
 	}
 }
+
+func TestReadVarsFileMissing(t *testing.T) {
+	if _, err := ReadVarsFile(filepath.Join(t.TempDir(), "nope.json")); err == nil {
+		t.Fatal("want an error for a missing vars file")
+	}
+}

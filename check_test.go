@@ -157,3 +157,17 @@ func TestCheckRejectsTemplateOwnedProvenance(t *testing.T) {
 		t.Fatalf("Check error = %v, want a reserved-name refusal", err)
 	}
 }
+
+// A derived default referencing an undeclared variable fails defaults
+// resolution — check surfaces it like any other template error.
+func TestCheckRejectsDefaultReferencingUndeclaredVar(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": `{"version": 1, "variables": {
+			"PROJECT_NAME": {"default": "demo"},
+			"X": {"default": "{{ .NOPE }}"}}}`,
+		"file.txt": "x\n",
+	})
+	if _, err := Check(versionDir); err == nil || !strings.Contains(err.Error(), "NOPE") {
+		t.Fatalf("Check error = %v, want an undeclared-variable refusal", err)
+	}
+}

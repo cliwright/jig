@@ -266,3 +266,10 @@ func TestLoadManifestVerbatimEntries(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadManifestMissingFile(t *testing.T) {
+	_, err := LoadManifest(filepath.Join(t.TempDir(), "nope.json"))
+	if err == nil || !strings.Contains(err.Error(), "reading") {
+		t.Fatalf("error = %v, want a read failure", err)
+	}
+}
