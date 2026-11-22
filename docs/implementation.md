@@ -82,6 +82,8 @@ possible.
 `year` and `date` are UTC — for copyright headers and generated-file
 notices. A template using them is not bit-reproducible across time.
 
+`replace` takes the string last so it composes in pipelines.
+
 ## Provenance: `.jig.json`
 
 Every render writes a `.jig.json` record into the rendered project's
@@ -100,12 +102,11 @@ root — where the project came from and the values that produced it:
 
 The record is data for tooling — finding stale renders in a fleet,
 re-rendering a project the same way — not an update mechanism (see
-[ADR 20](adr/0020-provenance-record.md)). Two consequences worth
+[ADR 20](adr/0020-provenance-record.md)). Consequences worth
 knowing: **values are recorded verbatim**, so never prompt for secrets
-in template variables; and `.jig.json` is reserved — a template may not
-ship its own.
-
-`replace` takes the string last so it composes in pipelines.
+in template variables; `.jig.json` is reserved — a template may not
+ship its own; and the record joins the render like any other file, so
+an existing one is never overwritten without `--force`.
 
 ## Templating files that contain `{{ }}`
 

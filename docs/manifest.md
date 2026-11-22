@@ -35,17 +35,7 @@ itself never renders into the output as it is the template's own metadata.
 | --- | --- | --- |
 | `version` | yes | Manifest schema version; currently `1` |
 | `variables` | yes | Map of variable name to its declaration (below) |
-| `verbatim` | no | Entries that copy as-is, unrendered (below) |
-
-`verbatim` accepts three forms:
-
-- a directory **base name** (`"template"`): the subtree is verbatim
-  wherever a directory of that name sits in the skeleton;
-- a directory's **root-relative path** (`"docs/helm"`): just that
-  directory's subtree;
-- a file's **root-relative path** (`".github/workflows/ci.yml"`): that
-  single file — the escape hatch for foreign-syntax files at the
-  skeleton root, which have no parent directory to list.
+| `verbatim` | no | Entries that copy as-is, unrendered — see [Verbatim entries](#verbatim-entries) |
 
 ### `variables.<NAME>`
 
@@ -134,8 +124,10 @@ answering `PROJECT_NAME` differently also fixes `PKG`.
   prints a warning so manifests don't collect cruft. (A variable referenced
   by another variable's default counts as used.)
 - Rendered names must stay **inside the output directory** — values that
-  render to `../…` or empty names fail the render no matter what the
-  manifest allows.
+  render to `../…` fail the render no matter what the manifest allows. A
+  name that renders to an **empty string** instead *excludes* the file or
+  directory from the output — the conditional mechanism; only the
+  top-level project directory may not render empty.
 - **Symlinks are rejected** by default; `jig render --trust` recreates them
   in the output, but only relative links that resolve inside the template
   tree. Symlinks already sitting in the destination are never followed,
@@ -151,19 +143,29 @@ answering `PROJECT_NAME` differently also fixes `PKG`.
 - `jig check` dry-renders all of this without writing — run it before
   shipping a template.
 
-## Verbatim directories
+## Verbatim entries
 
-`verbatim` lists directory **base names** that copy without rendering —
-file names and file contents ship exactly as authored, wherever those
-directories sit in the skeleton. This exists for templates that ship
-templates: a scaffolding template can embed a nested template tree without
-the outer render consuming the inner one's `{{…}}` placeholders.
+`verbatim` lists entries that copy without rendering — file names and
+file contents ship exactly as authored. This exists for templates that
+ship foreign syntax: a scaffolding template can embed a nested template
+tree without the outer render consuming the inner one's `{{…}}`
+placeholders, and a CI workflow can keep its own `${{ }}` expressions.
 
 ```json
 { "verbatim": ["template"] }
 ```
 
-Entries must be directory **base names** (`template`, not `ci/shared`): a
-verbatim entry matches any directory with that base name, wherever it sits
-in the skeleton. To shield only one specific subtree, give its directory a
-distinctive name.
+Entries accept three forms:
+
+- a directory **base name** (`"template"`): the subtree is verbatim
+  wherever a directory of that name sits in the skeleton. To shield only
+  one specific subtree, either give its directory a distinctive name or
+  use the next form;
+- a directory's **root-relative path** (`"docs/helm"`): just that
+  directory's subtree;
+- a file's **root-relative path** (`".github/workflows/ci.yml"`): that
+  single file — the escape hatch for foreign-syntax files at the
+  skeleton root, which have no parent directory to list.
+
+A matched directory's own name still renders normally — only its
+contents ship unrendered.

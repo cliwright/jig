@@ -45,10 +45,21 @@ Rendering never overwrites an existing file unless `--force` is given.
 Rendering into a populated directory is fine as long as no file collides —
 and the check is both ways: two template entries rendering to the *same*
 destination also fail. Everything is prepared in memory first — names,
-contents, collisions, containment — so a bad template fails before anything
-is written. Rendered names must stay inside the output directory: a value
-that renders to `../anything` or an empty name fails the render, regardless
-of what the manifest's patterns allow.
+contents, collisions, containment, destination types — so a bad template
+fails before anything is written. Rendered names must stay inside the
+output directory: a value that renders to `../anything` fails the render,
+regardless of what the manifest's patterns allow. A file or directory
+whose *name* renders to an empty string is excluded from the output
+instead — the conditional mechanism; only the top-level project directory
+may not render empty.
+
+Every render also writes a `.jig.json` provenance record into the project
+root: the template ref and version, the tool, the timestamp, and the
+resolved values — enough to find stale renders or render the project again
+the same way. The name is reserved (a template may not ship its own), and
+an existing `.jig.json` is protected by the same no-overwrite rule as
+every other file. Note that the record contains the values verbatim —
+never prompt for secrets in template variables.
 
 ## jig new
 
