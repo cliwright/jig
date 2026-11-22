@@ -36,8 +36,10 @@ type Options struct {
 	Trust bool
 	// Provenance, when non-nil, is recorded as ProvenanceFileName
 	// (.jig.json) in the rendered project's root: where the project came
-	// from and the values it was rendered with. The file name is then
-	// reserved — a template shipping it fails the render (ADR 20).
+	// from and the values it was rendered with. The record joins the
+	// render plan like any other file — the name is reserved against the
+	// template (ADR 20), and a pre-existing record is protected by the
+	// same overwrite policy as every other destination.
 	Provenance *Provenance
 }
 
@@ -188,7 +190,7 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 		return nil, fmt.Errorf("rendering the project directory name: %w", err)
 	}
 
-	plan, err := planRender(skel, dest, values, used, m.Verbatim, opts.Trust)
+	plan, err := planRender(skel, dest, values, used, m.Verbatim, opts.Trust, opts.Provenance)
 	if err != nil {
 		return nil, err
 	}
@@ -241,11 +243,6 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 			return nil, err
 		}
 	}
-	if opts.Provenance != nil {
-		if err := writeProvenance(dest, opts.Provenance, plan, values); err != nil {
-			return nil, err
-		}
-	}
 	return &Result{OutputDir: dest, Unused: m.Unused(used)}, nil
 }
 
@@ -258,36 +255,6 @@ type provenanceRecord struct {
 	Tool            string            `json:"tool"`
 	RenderedAt      string            `json:"rendered_at"`
 	Values          map[string]string `json:"values"`
-}
-
-// writeProvenance writes the .jig.json record into the rendered project
-// root. The name is reserved: a template shipping its own .jig.json fails
-// rather than having it silently replaced.
-func writeProvenance(dest string, p *Provenance, plan *renderPlan, values map[string]string) error {
-	path := filepath.Join(dest, ProvenanceFileName)
-	for _, f := range plan.files {
-		if dstKey(f.dst) == dstKey(path) {
-			return fmt.Errorf("template ships %s: %s is reserved for render provenance", f.dst, ProvenanceFileName)
-		}
-	}
-	for _, d := range plan.dirs {
-		if dstKey(d) == dstKey(path) {
-			return fmt.Errorf("template ships a directory %s: %s is reserved for render provenance", d, ProvenanceFileName)
-		}
-	}
-	rec := provenanceRecord{
-		Version:         1,
-		Template:        p.Template,
-		TemplateVersion: p.Version,
-		Tool:            p.Tool,
-		RenderedAt:      time.Now().UTC().Format(time.RFC3339),
-		Values:          values,
-	}
-	data, err := json.MarshalIndent(rec, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writeFile(path, append(data, '\n'), 0o644)
 }
 
 // renderPlan is the fully prepared render: directories to create and files
@@ -327,7 +294,13 @@ type plannedFile struct {
 // conditional branch, not only the ones the current values select. Only
 // emitted entries take part in collision detection: two siblings excluded
 // under the same values cannot collide in the output.
-func planRender(skel, dest string, values map[string]string, used map[string]bool, verbatim []string, trust bool) (*renderPlan, error) {
+//
+// When provenance is non-nil the .jig.json record joins the plan as an
+// ordinary prepared file: its reserved name is checked against the
+// template's own entries here, and the caller's preflight (destination
+// chain, overwrite policy) and write phase then treat it like any other
+// file. The record's timestamp is prepared now, before any write.
+func planRender(skel, dest string, values map[string]string, used map[string]bool, verbatim []string, trust bool, provenance *Provenance) (*renderPlan, error) {
 	plan := &renderPlan{}
 	renderedDirs := map[string]string{"": dest, ".": dest}
 	type dstKind struct {
@@ -428,6 +401,28 @@ func planRender(skel, dest string, values map[string]string, used map[string]boo
 	})
 	if err != nil {
 		return nil, err
+	}
+	if provenance != nil {
+		dst := filepath.Join(dest, ProvenanceFileName)
+		if prev, ok := planned[dstKey(dst)]; ok {
+			if prev.kind == "directory" {
+				return nil, fmt.Errorf("template ships a directory %s: %s is reserved for render provenance", prev.rel, ProvenanceFileName)
+			}
+			return nil, fmt.Errorf("template ships %s: %s is reserved for render provenance", prev.rel, ProvenanceFileName)
+		}
+		rec := provenanceRecord{
+			Version:         1,
+			Template:        provenance.Template,
+			TemplateVersion: provenance.Version,
+			Tool:            provenance.Tool,
+			RenderedAt:      time.Now().UTC().Format(time.RFC3339),
+			Values:          values,
+		}
+		data, err := json.MarshalIndent(rec, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		plan.files = append(plan.files, plannedFile{dst: dst, data: append(data, '\n'), mode: 0o644})
 	}
 	return plan, nil
 }

@@ -143,3 +143,17 @@ func TestCheckRejectsUndeclaredVarInDefinedTemplate(t *testing.T) {
 		t.Fatalf("Check error = %v, want an undeclared-variable refusal", err)
 	}
 }
+
+// The CLI's render always writes .jig.json, so check reserves the name: a
+// template shipping its own fails here, not after a render wrote half a
+// tree.
+func TestCheckRejectsTemplateOwnedProvenance(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":  validManifest,
+		"README.md": "read me\n",
+		".jig.json": "mine\n",
+	})
+	if _, err := Check(versionDir); err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("Check error = %v, want a reserved-name refusal", err)
+	}
+}

@@ -868,12 +868,76 @@ func TestRenderProvenanceConflictsWithTemplateFile(t *testing.T) {
 	// silently replaced by the record
 	versionDir := writeTemplate(t, map[string]string{
 		"jig.json":  validManifest,
+		"README.md": "read me\n",
 		".jig.json": "mine\n",
 	})
-	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{
+	out := t.TempDir()
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{
 		Provenance: &Provenance{Template: "x/y/z", Version: 1, Tool: "jig test"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "reserved") {
 		t.Fatalf("error = %v, want a reserved-name refusal", err)
+	}
+	// the refusal happens during planning: nothing was written
+	if _, serr := os.Stat(filepath.Join(out, "demo")); !os.IsNotExist(serr) {
+		t.Errorf("failed render left output behind in %s", out)
+	}
+}
+
+func TestRenderProvenanceReservedNameIsCaseInsensitive(t *testing.T) {
+	// .JIG.JSON is the same file as .jig.json on default macOS/Windows
+	// filesystems — the reservation is case-folded like every collision
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":  validManifest,
+		".JIG.JSON": "mine\n",
+	})
+	out := t.TempDir()
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{
+		Provenance: &Provenance{Template: "x/y/z", Version: 1, Tool: "jig test"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("error = %v, want a reserved-name refusal", err)
+	}
+}
+
+func TestRenderPreservesExistingProvenanceUnlessForce(t *testing.T) {
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":  validManifest,
+		"README.md": "read me\n",
+	})
+	out := t.TempDir()
+	dest := filepath.Join(out, "demo")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(dest, ProvenanceFileName)
+	if err := os.WriteFile(record, []byte("original provenance\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	values := map[string]string{"PROJECT_NAME": "demo", "author": "x"}
+	opts := Options{Provenance: &Provenance{Template: "x/y/z", Version: 1, Tool: "jig test"}}
+
+	// the record is a planned file: an existing one is protected by the
+	// same no-overwrite policy as every other destination
+	_, err := Render(versionDir, out, values, opts)
+	if err == nil || !strings.Contains(err.Error(), "would overwrite") {
+		t.Fatalf("error = %v, want an overwrite refusal", err)
+	}
+	if data, _ := os.ReadFile(record); string(data) != "original provenance\n" {
+		t.Errorf("record = %q, want the original preserved", data)
+	}
+
+	// under --force the record is replaced like any other file
+	opts.Force = true
+	if _, err := Render(versionDir, out, values, opts); err != nil {
+		t.Fatalf("Render with Force: %v", err)
+	}
+	data, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal(data, &rec); err != nil || rec["template"] != "x/y/z" {
+		t.Errorf("record = %q, %v — want the new provenance record", data, err)
 	}
 }
