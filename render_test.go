@@ -439,6 +439,51 @@ func TestRenderContentErrorLeavesNoPartialTree(t *testing.T) {
 	}
 }
 
+func TestRenderForcePreflightsDestinationTypes(t *testing.T) {
+	// a planned file whose destination is an existing directory fails
+	// before the write phase — Force or not — so no earlier file is left
+	// behind
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json": validManifest,
+		"a.txt":    "a\n",
+		"z.txt":    "z\n",
+	})
+	out := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(out, "demo", "z.txt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Force: true})
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("error = %v, want a destination-type refusal", err)
+	}
+	if _, serr := os.Stat(filepath.Join(out, "demo", "a.txt")); !os.IsNotExist(serr) {
+		t.Error("failed render left a.txt behind")
+	}
+}
+
+func TestRenderRefusesFileBlockingPlannedDirectory(t *testing.T) {
+	// a planned directory whose destination is an existing regular file
+	// fails before the write phase too
+	versionDir := writeTemplate(t, map[string]string{
+		"jig.json":     validManifest,
+		"sub/file.txt": "x\n",
+	})
+	out := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(out, "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(out, "demo", "sub"), []byte("blocker\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Force: true})
+	if err == nil || !strings.Contains(err.Error(), "directory") {
+		t.Fatalf("error = %v, want a destination-type refusal", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(out, "demo", "sub")); string(data) != "blocker\n" {
+		t.Error("the blocking file was disturbed")
+	}
+}
+
 func TestRenderForceDoesNotWriteThroughHardLink(t *testing.T) {
 	versionDir := writeTemplate(t, map[string]string{
 		"jig.json": validManifest,
@@ -592,7 +637,8 @@ func TestRenderForceSymlinkOverExistingFileFails(t *testing.T) {
 	versionDir := writeSymlinkTemplate(t, "real.txt")
 	out := t.TempDir()
 	// the link's destination exists as a regular file: recreating the link
-	// must fail rather than clobber it, even under --force
+	// is refused during preflight rather than clobbering it, even under
+	// --force
 	if err := os.MkdirAll(filepath.Join(out, "demo"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -600,8 +646,8 @@ func TestRenderForceSymlinkOverExistingFileFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := Render(versionDir, out, map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Force: true, Trust: true})
-	if err == nil || !strings.Contains(err.Error(), "linking") {
-		t.Fatalf("error = %v, want a link failure", err)
+	if err == nil || !strings.Contains(err.Error(), "cannot replace it with a symlink") {
+		t.Fatalf("error = %v, want a symlink preflight refusal", err)
 	}
 	data, _ := os.ReadFile(filepath.Join(out, "demo", "link.txt"))
 	if string(data) != "keep\n" {

@@ -161,11 +161,11 @@ func looksLikePath(name string) bool {
 //
 // Rendering is fully prepared before anything is written: every name and
 // every file's content is rendered in memory, destinations are checked for
-// internal collisions, containment, symlinked components, and (unless
-// Force) existing files. Only when all of that passes does the write phase
-// create directories and files — a template error never leaves a partial
-// tree. (Disk failures mid-write and concurrent filesystem changes remain
-// outside the guarantee.)
+// internal collisions, containment, symlinked components, existing
+// destinations' types, and (unless Force) existing files. Only when all of
+// that passes does the write phase create directories and files — a
+// template error never leaves a partial tree. (Disk failures mid-write
+// and concurrent filesystem changes remain outside the guarantee.)
 //
 // A file or directory whose name renders to an empty string is excluded
 // from the output — the conditional-inclusion mechanism (ADR 19). The
@@ -206,6 +206,39 @@ func Render(versionDir, outputDir string, values map[string]string, opts Options
 	for _, f := range plan.files {
 		if err := checkDestChain(outputDir, f.dst); err != nil {
 			return nil, err
+		}
+	}
+	// Destination types are preflighted too, Force or not: a planned file
+	// whose destination is an existing directory (or other non-regular
+	// file), or a planned directory blocked by a file, fails here — before
+	// the write phase, not after earlier files landed. A planned symlink
+	// can never replace an existing destination, so refuse that up front
+	// as well.
+	for _, d := range plan.dirs {
+		info, err := os.Lstat(d)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("checking %s: %w", d, err)
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("destination %s exists and is not a directory", d)
+		}
+	}
+	for _, f := range plan.files {
+		info, err := os.Lstat(f.dst)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("checking %s: %w", f.dst, err)
+		}
+		if f.linkTarget != "" {
+			return nil, fmt.Errorf("destination %s exists: cannot replace it with a symlink", f.dst)
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("destination %s exists and is not a regular file", f.dst)
 		}
 	}
 	if !opts.Force {
