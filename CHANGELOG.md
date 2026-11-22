@@ -9,6 +9,40 @@ Releases before 0.4.1 predate this changelog.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+
+### Fixed
+
+- The `.jig.json` provenance record is now part of the render plan
+  instead of a post-write step, closing two safety defects found in
+  review: a pre-existing `.jig.json` was silently replaced without
+  `--force` (the overwrite preflight only covered the template's own
+  files), and a template shipping its own `.jig.json` passed `jig check`
+  and failed the render only after earlier files were already written
+  (the reserved-name check ran after the write phase). The reservation
+  is now checked during planning, case-folded like every collision; the
+  record is prepared before anything is written; and an existing record
+  is protected by the same no-overwrite rule as every other file.
+- Destination types are preflighted before the write phase, `--force`
+  or not: a planned file whose destination is an existing directory (or
+  other non-regular file), and a planned directory blocked by a file,
+  fail before anything is written. Previously a forced render into such
+  a tree left the earlier files behind. A planned symlink over an
+  existing destination is refused up front too — it could never succeed.
+- `--vars-file` rejects a bare JSON `null`; it previously behaved like
+  an empty override set.
+
+### Documentation
+
+- The manifest and CLI references describe current behavior again: all
+  three `verbatim` entry forms (not only directory base names), empty
+  rendered names as the conditional-exclusion mechanism (a hard error
+  only for the top-level project directory), and the `.jig.json`
+  provenance record — what every render writes, the reserved name, the
+  no-overwrite protection, and why variables must never carry secrets.
+- The template registry is now tagged (`v1.0.0`), so the documented
+  `checkout v1.0.0` reproducibility pin works.
+
 ## [0.4.8] - 2026-11-21
 
 ### Added
