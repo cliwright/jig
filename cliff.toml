@@ -44,9 +44,21 @@ Releases before 0.4.1 predate this changelog.
 # bare version, and the conventional-commit prefix is stripped from each
 # message. Generated output is a draft: edit it into prose before
 # committing.
+#
+# Version headings link to a GitHub compare between the previous and
+# current tag — against the MIRROR, whose tags exist publicly. Per-commit
+# links are deliberately absent: the mirror is a `git subtree split`, so
+# its commit SHAs differ from the monorepo SHAs git-cliff sees here, and
+# generated commit links would be dead.
 body = """
 {% if version -%}
-    ## [{{ version | trim_start_matches(pat="jig/v") | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+    {% set v = version | trim_start_matches(pat="jig/v") | trim_start_matches(pat="v") -%}
+    {% if previous.version -%}
+        {% set pv = previous.version | trim_start_matches(pat="jig/v") | trim_start_matches(pat="v") -%}
+        ## [{{ v }}](https://github.com/cliwright/jig/compare/v{{ pv }}...v{{ v }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+    {% else -%}
+        ## [{{ v }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+    {% endif %}
 {% else -%}
     ## [Unreleased]
 {% endif %}
