@@ -1051,11 +1051,18 @@ func TestRenderPreflightsDirectoryBlockedByFile(t *testing.T) {
 func TestRenderRejectsAbsoluteSymlinkTarget(t *testing.T) {
 	// even trusted, an absolute link would recreate as a pointer back to
 	// the author's machine — the target string alone condemns it, the
-	// target need not exist
-	versionDir := writeSymlinkTemplate(t, "/etc/hostname")
-	_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Trust: true})
-	if err == nil || !strings.Contains(err.Error(), "absolute target") {
-		t.Fatalf("error = %v, want an absolute-target refusal", err)
+	// target need not exist. On Windows, drive-letter and rooted-slash
+	// forms are both absolute; filepath.IsAbs alone misses the slash form.
+	targets := []string{"/etc/hostname"}
+	if runtime.GOOS == "windows" {
+		targets = append(targets, `C:\Windows\system.ini`)
+	}
+	for _, target := range targets {
+		versionDir := writeSymlinkTemplate(t, target)
+		_, err := Render(versionDir, t.TempDir(), map[string]string{"PROJECT_NAME": "demo", "author": "x"}, Options{Trust: true})
+		if err == nil || !strings.Contains(err.Error(), "absolute target") {
+			t.Fatalf("target %q: error = %v, want an absolute-target refusal", target, err)
+		}
 	}
 }
 

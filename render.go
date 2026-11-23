@@ -8,6 +8,7 @@ import (
 	"os"
 	pathpkg "path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -482,7 +483,7 @@ func checkSymlink(skel, path string, trust bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("reading symlink %s: %w", path, err)
 	}
-	if filepath.IsAbs(target) {
+	if isAbsLinkTarget(target) {
 		return "", fmt.Errorf("symlink %s has absolute target %s: only relative links inside the template tree are allowed, even with --trust", path, target)
 	}
 	resolved := filepath.Join(filepath.Dir(path), target)
@@ -499,6 +500,19 @@ func checkSymlink(skel, path string, trust bool) (string, error) {
 		return "", fmt.Errorf("symlink %s points outside the template tree (%s)", path, target)
 	}
 	return target, nil
+}
+
+// isAbsLinkTarget reports whether a symlink target is absolute. Go's
+// filepath.IsAbs is OS-shaped: on Windows it requires a volume name, so
+// "/etc/hostname" — a rooted path that would recreate pointing at the
+// machine's drive root, not the template tree — slips through it. A
+// leading slash is absolute on every platform jig runs on, and a leading
+// backslash is rooted on Windows.
+func isAbsLinkTarget(target string) bool {
+	if filepath.IsAbs(target) || pathpkg.IsAbs(target) {
+		return true
+	}
+	return runtime.GOOS == "windows" && strings.HasPrefix(target, "\\")
 }
 
 // checkDestChain walks the existing components of dst (relative to root,
